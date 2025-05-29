@@ -1,0 +1,9 @@
+.venv
+*.db
+test*
+local_backup*
+.env
+
+
+__pycache__
+__init__.py
