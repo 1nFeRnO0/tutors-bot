@@ -90,7 +90,7 @@ async def process_edit_name(callback_query: types.CallbackQuery, state: FSMConte
     await callback_query.message.edit_text(
         "Введите новое имя:"
     )
-    await state.set_state(ProfileEditing.editing_surname)
+    await state.set_state(ProfileEditing.editing_name)
 
 async def process_edit_surname(callback_query: types.CallbackQuery, state: FSMContext):
     current_state = await state.get_state()
@@ -113,6 +113,7 @@ async def process_name_input(message: types.Message, state: FSMContext):
         "Редактирование профиля:",
         reply_markup=get_profile_edit_keyboard(name=message.text, surname=data.get("surname", ""))
     )
+    print(message.text)
     await state.set_state(ProfileEditing.editing_name)
 
 async def process_surname_input(message: types.Message, state: FSMContext):
