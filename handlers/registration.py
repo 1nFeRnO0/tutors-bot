@@ -22,12 +22,14 @@ class TutorRegistration(StatesGroup):
     waiting_for_name_surname = State()
     waiting_for_name_input = State()
     waiting_for_surname_input = State()
+    waiting_for_patronymic_input = State()
     waiting_for_subjects = State()
     waiting_for_description = State()
     waiting_for_schedule_table = State()
     waiting_for_time_hour = State()
     waiting_for_time_minute = State()
     setting_prices = State()
+    waiting_for_price_input = State()
 
 async def process_start_registration(callback_query: types.CallbackQuery, state: FSMContext):
     await callback_query.message.edit_text(
@@ -48,6 +50,17 @@ async def process_edit_surname(callback_query: types.CallbackQuery, state: FSMCo
         await callback_query.message.edit_text("Какая у тебя фамилия?")
         await state.set_state(TutorRegistration.waiting_for_surname_input)
 
+async def process_edit_patronymic(callback_query: types.CallbackQuery, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state == TutorRegistration.waiting_for_name_surname.state:
+        await callback_query.message.edit_text(
+            "Какое у тебя отчество? (Если отчества нет, просто нажми 'Продолжить')",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Продолжить без отчества", callback_data="skip_patronymic")]
+            ])
+        )
+        await state.set_state(TutorRegistration.waiting_for_patronymic_input)
+
 async def process_name_input(message: types.Message, state: FSMContext):
     data = await state.get_data()
     await state.update_data(name=message.text)
@@ -63,6 +76,19 @@ async def process_surname_input(message: types.Message, state: FSMContext):
     await message.answer(
         "Заполните информацию о себе:",
         reply_markup=get_registration_form_keyboard(name=data.get("name", ""), surname=message.text)
+    )
+    await state.set_state(TutorRegistration.waiting_for_name_surname)
+
+async def process_patronymic_input(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    await state.update_data(patronymic=message.text)
+    await message.answer(
+        "Заполните информацию о себе:",
+        reply_markup=get_registration_form_keyboard(
+            name=data.get("name", ""),
+            surname=data.get("surname", ""),
+            patronymic=message.text
+        )
     )
     await state.set_state(TutorRegistration.waiting_for_name_surname)
 
@@ -255,6 +281,7 @@ async def save_schedule(callback_query: types.CallbackQuery, state: FSMContext):
             telegram_id=callback_query.from_user.id,
             name=data["name"],
             surname=data["surname"],
+            patronymic=data.get("patronymic"),
             subjects=data["subjects"],
             schedule=schedule,
             description=data["description"]
@@ -288,10 +315,11 @@ async def process_registration_price_edit(callback_query: types.CallbackQuery, s
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="registration_price_cancel_edit")]
         ])
     )
+    await state.set_state(TutorRegistration.waiting_for_price_input)
 
 async def process_registration_price_input(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
-    if current_state != TutorRegistration.setting_prices.state:
+    if current_state != TutorRegistration.waiting_for_price_input.state:
         return
         
     try:
@@ -322,6 +350,7 @@ async def process_registration_price_input(message: types.Message, state: FSMCon
             break
     
     await state.update_data(subjects=subjects)
+    await state.set_state(TutorRegistration.setting_prices)
     await message.answer(
         "💰 Установите цены для каждого типа занятий:\n"
         "Нажмите на цену, чтобы изменить её",
@@ -329,8 +358,13 @@ async def process_registration_price_input(message: types.Message, state: FSMCon
     )
 
 async def cancel_registration_price_edit(callback_query: types.CallbackQuery, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state != TutorRegistration.waiting_for_price_input.state:
+        return
+        
     data = await state.get_data()
     subjects = data.get("subjects", [])
+    await state.set_state(TutorRegistration.setting_prices)  # Возвращаемся к состоянию настройки цен
     await callback_query.message.edit_text(
         "💰 Установите цены для каждого типа занятий:\n"
         "Нажмите на цену, чтобы изменить её",
@@ -380,10 +414,23 @@ async def back_to_prices(callback_query: types.CallbackQuery, state: FSMContext)
     )
     await state.set_state(TutorRegistration.setting_prices)
 
+async def skip_patronymic(callback_query: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    await callback_query.message.edit_text(
+        "Заполните информацию о себе:",
+        reply_markup=get_registration_form_keyboard(
+            name=data.get("name", ""),
+            surname=data.get("surname", ""),
+            patronymic=""
+        )
+    )
+    await state.set_state(TutorRegistration.waiting_for_name_surname)
+
 def register_registration_handlers(dp):
     dp.callback_query.register(process_start_registration, lambda c: c.data == "start_registration")
     dp.callback_query.register(process_edit_name, lambda c: c.data == "edit_name")
     dp.callback_query.register(process_edit_surname, lambda c: c.data == "edit_surname")
+    dp.callback_query.register(process_edit_patronymic, lambda c: c.data == "edit_patronymic")
     dp.message.register(process_name_input, TutorRegistration.waiting_for_name_input)
     dp.message.register(process_surname_input, TutorRegistration.waiting_for_surname_input)
     dp.callback_query.register(process_finish_name_surname, lambda c: c.data == "finish_name_surname")
@@ -399,7 +446,9 @@ def register_registration_handlers(dp):
     dp.callback_query.register(save_schedule, lambda c: c.data == "save_schedule")
     dp.callback_query.register(process_registration_price_edit, lambda c: c.data.startswith("registration_price_edit_"))
     dp.callback_query.register(cancel_registration_price_edit, lambda c: c.data == "registration_price_cancel_edit")
+    dp.message.register(process_registration_price_input, TutorRegistration.waiting_for_price_input)
     dp.callback_query.register(save_registration_prices, lambda c: c.data == "registration_price_save")
     dp.callback_query.register(back_to_subjects, lambda c: c.data == "registration_price_back")
     dp.callback_query.register(back_to_prices, lambda c: c.data == "registration_description_back")
-    dp.message.register(process_registration_price_input, TutorRegistration.setting_prices) 
+    dp.message.register(process_patronymic_input, TutorRegistration.waiting_for_patronymic_input)
+    dp.callback_query.register(skip_patronymic, lambda c: c.data == "skip_patronymic") 

@@ -13,6 +13,7 @@ class Tutor(Base):
     telegram_id = Column(Integer, unique=True)
     name = Column(String)
     surname = Column(String)
+    patronymic = Column(String, nullable=True)  # Отчество, опциональное
     subjects = Column(JSON)  # Список предметов
     schedule = Column(JSON)  # Расписание в формате {день: [время]}
     description = Column(String)  # Описание репетитора

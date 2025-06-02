@@ -21,8 +21,10 @@ from keyboards import (
 class ProfileEditing(StatesGroup):
     editing_name = State()
     editing_surname = State()
+    editing_patronymic = State()
     editing_subjects = State()
     editing_prices = State()
+    waiting_for_price_input = State()
     editing_description = State()
     editing_schedule = State()
 
@@ -49,10 +51,14 @@ async def show_profile(callback_query: types.CallbackQuery):
                 types.append(f"📖 Стандарт: {price}₽/час")
             subjects_text.append(f"• {subject['name']}\n  {'\n  '.join(types)}")
         
+        # Формируем полное имя с отчеством (если есть)
+        full_name = f"{tutor.name} {tutor.surname}"
+        if tutor.patronymic:
+            full_name = f"{tutor.name} {tutor.patronymic} {tutor.surname}"
+        
         profile_text = (
             f"👤 <b>Профиль репетитора</b>\n\n"
-            f"👤 Имя: {tutor.name}\n"
-            f"👤 Фамилия: {tutor.surname}\n\n"
+            f"👤 Имя: {full_name}\n\n"
             f"📚 <b>Предметы и цены:</b>\n{chr(10).join(subjects_text)}\n\n"
             f"📝 <b>О себе:</b>\n{tutor.description}\n\n"
             f"🕒 <b>Расписание:</b>\n"
@@ -89,10 +95,18 @@ async def edit_profile_name(callback_query: types.CallbackQuery, state: FSMConte
         )
         tutor = tutor.scalar_one_or_none()
         if tutor:
-            await state.update_data(name=tutor.name, surname=tutor.surname)
+            await state.update_data(
+                name=tutor.name,
+                surname=tutor.surname,
+                patronymic=tutor.patronymic
+            )
             await callback_query.message.edit_text(
                 "Редактирование профиля:",
-                reply_markup=get_profile_edit_keyboard(name=tutor.name, surname=tutor.surname)
+                reply_markup=get_profile_edit_keyboard(
+                    name=tutor.name,
+                    surname=tutor.surname,
+                    patronymic=tutor.patronymic
+                )
             )
             await state.set_state(ProfileEditing.editing_name)
 
@@ -116,6 +130,19 @@ async def process_edit_surname(callback_query: types.CallbackQuery, state: FSMCo
     )
     await state.set_state(ProfileEditing.editing_surname)
 
+async def process_edit_patronymic(callback_query: types.CallbackQuery, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state != ProfileEditing.editing_name.state:
+        return
+        
+    await callback_query.message.edit_text(
+        "Введите новое отчество (или оставьте пустым):",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Отмена", callback_data="profile_cancel_patronymic")]
+        ])
+    )
+    await state.set_state(ProfileEditing.editing_patronymic)
+
 async def process_name_input(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
     if current_state != ProfileEditing.editing_name.state:
@@ -125,7 +152,7 @@ async def process_name_input(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text)
     await message.answer(
         "Редактирование профиля:",
-        reply_markup=get_profile_edit_keyboard(name=message.text, surname=data.get("surname", ""))
+        reply_markup=get_profile_edit_keyboard(name=message.text, surname=data.get("surname", ""), patronymic=data.get("patronymic", ""))
     )
     print(message.text)
     await state.set_state(ProfileEditing.editing_name)
@@ -139,7 +166,36 @@ async def process_surname_input(message: types.Message, state: FSMContext):
     await state.update_data(surname=message.text)
     await message.answer(
         "Редактирование профиля:",
-        reply_markup=get_profile_edit_keyboard(name=data.get("name", ""), surname=message.text)
+        reply_markup=get_profile_edit_keyboard(name=data.get("name", ""), surname=message.text, patronymic=data.get("patronymic", ""))
+    )
+    await state.set_state(ProfileEditing.editing_name)
+
+async def process_patronymic_input(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state != ProfileEditing.editing_patronymic.state:
+        return
+        
+    data = await state.get_data()
+    await state.update_data(patronymic=message.text)
+    await message.answer(
+        "Редактирование профиля:",
+        reply_markup=get_profile_edit_keyboard(
+            name=data.get("name", ""),
+            surname=data.get("surname", ""),
+            patronymic=message.text
+        )
+    )
+    await state.set_state(ProfileEditing.editing_name)
+
+async def cancel_patronymic_edit(callback_query: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    await callback_query.message.edit_text(
+        "Редактирование профиля:",
+        reply_markup=get_profile_edit_keyboard(
+            name=data.get("name", ""),
+            surname=data.get("surname", ""),
+            patronymic=data.get("patronymic", "")
+        )
     )
     await state.set_state(ProfileEditing.editing_name)
 
@@ -161,10 +217,11 @@ async def save_profile_name_surname(callback_query: types.CallbackQuery, state: 
         if tutor:
             tutor.name = data["name"]
             tutor.surname = data["surname"]
+            tutor.patronymic = data.get("patronymic")
             await session.commit()
     
     await callback_query.message.edit_text(
-        "✅ Имя и фамилия успешно обновлены!",
+        "✅ Имя, фамилия и отчество успешно обновлены!",
         reply_markup=get_profile_menu_keyboard()
     )
     await state.clear()
@@ -528,10 +585,11 @@ async def process_price_edit(callback_query: types.CallbackQuery, state: FSMCont
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="price_cancel_edit")]
         ])
     )
+    await state.set_state(ProfileEditing.waiting_for_price_input)
 
 async def process_price_input(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
-    if current_state != ProfileEditing.editing_prices.state:
+    if current_state != ProfileEditing.waiting_for_price_input.state:
         return
         
     try:
@@ -562,20 +620,39 @@ async def process_price_input(message: types.Message, state: FSMContext):
             break
     
     await state.update_data(subjects=subjects)
+    await state.set_state(ProfileEditing.editing_prices)
     await message.answer(
         "💰 Установите цены для каждого типа занятий:\n"
         "Нажмите на цену, чтобы изменить её",
         reply_markup=get_profile_prices_keyboard(subjects)
     )
 
-async def cancel_price_edit(callback_query: types.CallbackQuery, state: FSMContext):
+async def cancel_price_input(callback_query: types.CallbackQuery, state: FSMContext):
+    """Отмена ввода цены и возврат к таблице цен"""
+    current_state = await state.get_state()
+    if current_state != ProfileEditing.waiting_for_price_input.state:
+        return
+        
     data = await state.get_data()
     subjects = data.get("subjects", [])
+    await state.set_state(ProfileEditing.editing_prices)  # Возвращаемся к состоянию редактирования цен
     await callback_query.message.edit_text(
         "💰 Установите цены для каждого типа занятий:\n"
         "Нажмите на цену, чтобы изменить её",
         reply_markup=get_profile_prices_keyboard(subjects)
     )
+
+async def cancel_prices_edit(callback_query: types.CallbackQuery, state: FSMContext):
+    """Отмена редактирования цен и возврат к меню профиля"""
+    current_state = await state.get_state()
+    if current_state != ProfileEditing.editing_prices.state:
+        return
+        
+    await callback_query.message.edit_text(
+        "📝 Выберите, что хотите изменить:",
+        reply_markup=get_profile_menu_keyboard()
+    )
+    await state.clear()
 
 async def save_profile_prices(callback_query: types.CallbackQuery, state: FSMContext):
     current_state = await state.get_state()
@@ -614,12 +691,15 @@ def register_profile_handlers(dp):
     dp.callback_query.register(show_edit_menu, lambda c: c.data == "edit_profile")
     dp.callback_query.register(back_to_main_menu, lambda c: c.data == "back_to_main")
     
-    # Обработчики для редактирования имени и фамилии
+    # Обработчики для редактирования имени, фамилии и отчества
     dp.callback_query.register(edit_profile_name, lambda c: c.data == "edit_profile_name")
     dp.callback_query.register(process_edit_name, lambda c: c.data == "profile_edit_name")
     dp.callback_query.register(process_edit_surname, lambda c: c.data == "profile_edit_surname")
+    dp.callback_query.register(process_edit_patronymic, lambda c: c.data == "profile_edit_patronymic")
+    dp.callback_query.register(cancel_patronymic_edit, lambda c: c.data == "profile_cancel_patronymic")
     dp.message.register(process_name_input, ProfileEditing.editing_name)
     dp.message.register(process_surname_input, ProfileEditing.editing_surname)
+    dp.message.register(process_patronymic_input, ProfileEditing.editing_patronymic)
     dp.callback_query.register(save_profile_name_surname, lambda c: c.data == "profile_save_name_surname")
     
     # Обработчики для редактирования предметов
@@ -647,6 +727,7 @@ def register_profile_handlers(dp):
     # Обработчики для редактирования цен
     dp.callback_query.register(edit_profile_prices, lambda c: c.data == "edit_profile_prices")
     dp.callback_query.register(process_price_edit, lambda c: c.data.startswith("price_edit_"))
-    dp.callback_query.register(cancel_price_edit, lambda c: c.data == "price_cancel_edit")
+    dp.callback_query.register(cancel_price_input, lambda c: c.data == "price_cancel_edit")
+    dp.callback_query.register(cancel_prices_edit, lambda c: c.data == "price_cancel")
     dp.callback_query.register(save_profile_prices, lambda c: c.data == "price_save")
-    dp.message.register(process_price_input, ProfileEditing.editing_prices) 
+    dp.message.register(process_price_input, ProfileEditing.waiting_for_price_input) 

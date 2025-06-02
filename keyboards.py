@@ -121,7 +121,7 @@ def get_minute_keyboard(day_code: str, time_type: str, hour: int) -> InlineKeybo
     keyboard.append([InlineKeyboardButton(text="Отмена", callback_data="back_to_schedule")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
-def get_registration_form_keyboard(name: str = "", surname: str = "") -> InlineKeyboardMarkup:
+def get_registration_form_keyboard(name: str = "", surname: str = "", patronymic: str = "") -> InlineKeyboardMarkup:
     keyboard = [
         [
             InlineKeyboardButton(text="Имя", callback_data="edit_name"),
@@ -130,6 +130,10 @@ def get_registration_form_keyboard(name: str = "", surname: str = "") -> InlineK
         [
             InlineKeyboardButton(text="Фамилия", callback_data="edit_surname"),
             InlineKeyboardButton(text=surname or "Не указано", callback_data="edit_surname")
+        ],
+        [
+            InlineKeyboardButton(text="Отчество", callback_data="edit_patronymic"),
+            InlineKeyboardButton(text=patronymic or "Не указано", callback_data="edit_patronymic")
         ],
         [InlineKeyboardButton(text="Продолжить", callback_data="finish_name_surname")]
     ]
@@ -153,7 +157,7 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
-def get_profile_edit_keyboard(name: str = "", surname: str = "") -> InlineKeyboardMarkup:
+def get_profile_edit_keyboard(name: str = "", surname: str = "", patronymic: str = "") -> InlineKeyboardMarkup:
     keyboard = [
         [
             InlineKeyboardButton(text="👤 Изменить имя", callback_data="profile_edit_name"),
@@ -162,6 +166,10 @@ def get_profile_edit_keyboard(name: str = "", surname: str = "") -> InlineKeyboa
         [
             InlineKeyboardButton(text="👤 Изменить фамилию", callback_data="profile_edit_surname"),
             InlineKeyboardButton(text=surname or "❌ Не указано", callback_data="profile_edit_surname")
+        ],
+        [
+            InlineKeyboardButton(text="👤 Изменить отчество", callback_data="profile_edit_patronymic"),
+            InlineKeyboardButton(text=patronymic or "❌ Не указано", callback_data="profile_edit_patronymic")
         ],
         [InlineKeyboardButton(text="💾 Сохранить изменения", callback_data="profile_save_name_surname")]
     ]
