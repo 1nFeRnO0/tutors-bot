@@ -31,7 +31,7 @@ async def show_profile(callback_query: types.CallbackQuery):
         tutor = tutor.scalar_one_or_none()
         
         if not tutor:
-            await callback_query.answer("Профиль не найден!")
+            await callback_query.answer("❌ Профиль не найден!")
             return
         
         # Форматируем список предметов с типами
@@ -39,25 +39,25 @@ async def show_profile(callback_query: types.CallbackQuery):
         for subject in tutor.subjects:
             types = []
             if subject["is_exam"]:
-                types.append("ОГЭ/ЕГЭ")
+                types.append("📚 ОГЭ/ЕГЭ")
             if subject["is_standard"]:
-                types.append("Стандарт")
+                types.append("📖 Стандарт")
             subjects_text.append(f"{subject['name']} ({', '.join(types)})")
         
         profile_text = (
             f"👤 <b>Профиль репетитора</b>\n\n"
-            f"Имя: {tutor.name}\n"
-            f"Фамилия: {tutor.surname}\n"
-            f"Предметы: {', '.join(subjects_text)}\n\n"
-            f"О себе:\n{tutor.description}\n\n"
-            f"Расписание:\n"
+            f"👤 Имя: {tutor.name}\n"
+            f"👤 Фамилия: {tutor.surname}\n"
+            f"📚 Предметы: {', '.join(subjects_text)}\n\n"
+            f"📝 <b>О себе:</b>\n{tutor.description}\n\n"
+            f"🕒 <b>Расписание:</b>\n"
         )
         
         # Добавляем информацию о расписании
         for day_code, day_name in DAY_NAMES.items():
             day_info = tutor.schedule.get(day_code, {})
             if day_info.get("active"):
-                profile_text += f"{day_name}: {day_info['start']} - {day_info['end']}\n"
+                profile_text += f"📅 {day_name}: {day_info['start']} - {day_info['end']}\n"
         
         await callback_query.message.edit_text(
             profile_text,
@@ -67,7 +67,7 @@ async def show_profile(callback_query: types.CallbackQuery):
 
 async def show_edit_menu(callback_query: types.CallbackQuery):
     await callback_query.message.edit_text(
-        "Выберите, что хотите изменить:",
+        "📝 Выберите, что хотите изменить:",
         reply_markup=get_profile_menu_keyboard()
     )
 
@@ -173,7 +173,7 @@ async def edit_profile_subjects(callback_query: types.CallbackQuery, state: FSMC
         if tutor:
             await state.update_data(subjects=tutor.subjects)
             await callback_query.message.edit_text(
-                "Выберите предметы и типы занятий:",
+                "📚 Выберите предметы и типы занятий:",
                 reply_markup=get_profile_subjects_keyboard(tutor.subjects)
             )
             await state.set_state(ProfileEditing.editing_subjects)
@@ -221,7 +221,7 @@ async def process_subject_selection(callback_query: types.CallbackQuery, state: 
     
     await state.update_data(subjects=subjects)
     await callback_query.message.edit_text(
-        "Выберите предметы и типы занятий:",
+        "📚 Выберите предметы и типы занятий:",
         reply_markup=get_profile_subjects_keyboard(subjects)
     )
 
@@ -235,7 +235,7 @@ async def save_profile_subjects(callback_query: types.CallbackQuery, state: FSMC
     
     # Проверяем, что хотя бы один предмет выбран с хотя бы одним типом
     if not any(s["is_exam"] or s["is_standard"] for s in subjects):
-        await callback_query.answer("Пожалуйста, выберите хотя бы один предмет и тип занятий!")
+        await callback_query.answer("❌ Пожалуйста, выберите хотя бы один предмет и тип занятий!")
         return
     
     async for session in get_session():
@@ -262,7 +262,7 @@ async def edit_profile_description(callback_query: types.CallbackQuery, state: F
         if tutor:
             await state.update_data(description=tutor.description)
             await callback_query.message.edit_text(
-                "Напишите новое описание о себе, своем опыте преподавания и методике обучения:",
+                "📝 Напишите новое описание о себе, своем опыте преподавания и методике обучения:",
                 reply_markup=get_profile_description_keyboard()
             )
             await state.set_state(ProfileEditing.editing_description)
@@ -319,7 +319,7 @@ async def edit_profile_schedule(callback_query: types.CallbackQuery, state: FSMC
         if tutor:
             await state.update_data(schedule=tutor.schedule)
             await callback_query.message.edit_text(
-                "Редактирование расписания\nВыберите рабочие дни и задайте время работы:",
+                "🕒 Редактирование расписания\n📅 Выберите рабочие дни и задайте время работы:",
                 reply_markup=get_profile_schedule_keyboard(tutor.schedule)
             )
             await state.set_state(ProfileEditing.editing_schedule)
@@ -436,7 +436,7 @@ async def process_profile_minute(callback_query: types.CallbackQuery, state: FSM
     
     await state.update_data(schedule=schedule)
     await callback_query.message.edit_text(
-        "Редактирование расписания\nВыберите рабочие дни и задайте время работы:",
+        "🕒 Редактирование расписания\n📅 Выберите рабочие дни и задайте время работы:",
         reply_markup=get_profile_schedule_keyboard(schedule)
     )
 
@@ -451,7 +451,7 @@ async def cancel_time_edit(callback_query: types.CallbackQuery, state: FSMContex
     data = await state.get_data()
     schedule = data.get("schedule", {})
     await callback_query.message.edit_text(
-        "Редактирование расписания\nВыберите рабочие дни и задайте время работы:",
+        "🕒 Редактирование расписания\n📅 Выберите рабочие дни и задайте время работы:",
         reply_markup=get_profile_schedule_keyboard(schedule)
     )
 
@@ -467,10 +467,10 @@ async def save_profile_schedule(callback_query: types.CallbackQuery, state: FSMC
     for day_code, info in schedule.items():
         if info["active"]:
             if not info["start"] or not info["end"]:
-                await callback_query.answer(f"Укажите время для {DAY_NAMES.get(day_code, day_code)}")
+                await callback_query.answer(f"❌ Укажите время для {DAY_NAMES.get(day_code, day_code)}")
                 return
             if info["end"] <= info["start"]:
-                await callback_query.answer(f"Время окончания должно быть позже начала для {DAY_NAMES.get(day_code, day_code)}")
+                await callback_query.answer(f"❌ Время окончания должно быть позже начала для {DAY_NAMES.get(day_code, day_code)}")
                 return
     
     async for session in get_session():

@@ -41,14 +41,18 @@ def get_subjects_keyboard(selected_subjects: list) -> InlineKeyboardMarkup:
             {"name": subject, "is_exam": False, "is_standard": False}
         )
         
-        # Создаем строку с двумя чекбоксами для каждого предмета
+        # Создаем строку с тремя кнопками для каждого предмета
         row = [
             InlineKeyboardButton(
-                text=f"{'✅' if subject_data['is_exam'] else '⬜'} {subject} (ОГЭ/ЕГЭ)",
+                text=f"{subject}",
+                callback_data=f"subject_name_{subject}"  # Неактивная кнопка с названием
+            ),
+            InlineKeyboardButton(
+                text=f"{'✅' if subject_data['is_exam'] else '⬜'} ОГЭ/ЕГЭ",
                 callback_data=f"subject_{subject}_exam"
             ),
             InlineKeyboardButton(
-                text=f"{'✅' if subject_data['is_standard'] else '⬜'} {subject} (Стандарт)",
+                text=f"{'✅' if subject_data['is_standard'] else '⬜'} Стандарт",
                 callback_data=f"subject_{subject}_standard"
             )
         ]
@@ -133,9 +137,9 @@ def get_registration_form_keyboard(name: str = "", surname: str = "") -> InlineK
 
 def get_profile_menu_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
-        [InlineKeyboardButton(text="📝 Изменить имя и фамилию", callback_data="edit_profile_name")],
+        [InlineKeyboardButton(text="👤 Изменить имя и фамилию", callback_data="edit_profile_name")],
         [InlineKeyboardButton(text="📚 Изменить предметы", callback_data="edit_profile_subjects")],
-        [InlineKeyboardButton(text="📋 Изменить описание", callback_data="edit_profile_description")],
+        [InlineKeyboardButton(text="📝 Изменить описание", callback_data="edit_profile_description")],
         [InlineKeyboardButton(text="🕒 Изменить расписание", callback_data="edit_profile_schedule")],
         [InlineKeyboardButton(text="◀️ Вернуться в главное меню", callback_data="back_to_main")]
     ]
@@ -151,14 +155,14 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
 def get_profile_edit_keyboard(name: str = "", surname: str = "") -> InlineKeyboardMarkup:
     keyboard = [
         [
-            InlineKeyboardButton(text="Изменить имя", callback_data="profile_edit_name"),
-            InlineKeyboardButton(text=name or "Не указано", callback_data="profile_edit_name")
+            InlineKeyboardButton(text="👤 Изменить имя", callback_data="profile_edit_name"),
+            InlineKeyboardButton(text=name or "❌ Не указано", callback_data="profile_edit_name")
         ],
         [
-            InlineKeyboardButton(text="Изменить фамилию", callback_data="profile_edit_surname"),
-            InlineKeyboardButton(text=surname or "Не указано", callback_data="profile_edit_surname")
+            InlineKeyboardButton(text="👤 Изменить фамилию", callback_data="profile_edit_surname"),
+            InlineKeyboardButton(text=surname or "❌ Не указано", callback_data="profile_edit_surname")
         ],
-        [InlineKeyboardButton(text="Сохранить изменения", callback_data="profile_save_name_surname")]
+        [InlineKeyboardButton(text="💾 Сохранить изменения", callback_data="profile_save_name_surname")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
@@ -174,14 +178,18 @@ def get_profile_subjects_keyboard(selected_subjects: list) -> InlineKeyboardMark
             {"name": subject, "is_exam": False, "is_standard": False}
         )
         
-        # Создаем строку с двумя чекбоксами для каждого предмета
+        # Создаем строку с тремя кнопками для каждого предмета
         row = [
             InlineKeyboardButton(
-                text=f"{'✅' if subject_data['is_exam'] else '⬜'} {subject} (ОГЭ/ЕГЭ)",
+                text=f"{subject}",
+                callback_data=f"subject_name_{subject}"  # Неактивная кнопка с названием
+            ),
+            InlineKeyboardButton(
+                text=f"{'✅' if subject_data['is_exam'] else '⬜'} ОГЭ/ЕГЭ",
                 callback_data=f"profile_subject_{subject}_exam"
             ),
             InlineKeyboardButton(
-                text=f"{'✅' if subject_data['is_standard'] else '⬜'} {subject} (Стандарт)",
+                text=f"{'✅' if subject_data['is_standard'] else '⬜'} Стандарт",
                 callback_data=f"profile_subject_{subject}_standard"
             )
         ]

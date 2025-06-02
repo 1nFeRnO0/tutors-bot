@@ -13,6 +13,8 @@ from keyboards import (
     DAY_NAMES
 )
 
+from handlers.profile import show_profile
+
 class TutorRegistration(StatesGroup):
     waiting_for_name_surname = State()
     waiting_for_name_input = State()
@@ -242,6 +244,7 @@ async def save_schedule(callback_query: types.CallbackQuery, state: FSMContext):
         "🎉 Регистрация завершена! Ваше расписание и данные сохранены."
     )
     await state.clear()
+    await show_profile(callback_query)
 
 async def save_subjects(callback_query: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
