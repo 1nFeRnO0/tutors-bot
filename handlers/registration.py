@@ -73,19 +73,35 @@ async def process_finish_name_surname(callback_query: types.CallbackQuery, state
     await state.set_state(TutorRegistration.waiting_for_subjects)
 
 async def process_subject_selection(callback_query: types.CallbackQuery, state: FSMContext):
-    current_data = await state.get_data()
-    subjects = current_data.get("subjects", [])
+    # subject_Математика_exam или subject_Математика_standard
+    _, subject, type_str = callback_query.data.split("_", 2)
+    is_exam = type_str == "exam"
     
-    subject = callback_query.data.replace("subject_", "")
-    if subject not in subjects:
-        subjects.append(subject)
+    data = await state.get_data()
+    subjects = data.get("subjects", [])
+    
+    # Ищем предмет в списке
+    subject_data = next(
+        (s for s in subjects if s["name"] == subject),
+        {"name": subject, "is_exam": False, "is_standard": False}
+    )
+    
+    # Обновляем соответствующий флаг
+    if is_exam:
+        subject_data["is_exam"] = not subject_data["is_exam"]
     else:
-        subjects.remove(subject)
+        subject_data["is_standard"] = not subject_data["is_standard"]
+    
+    # Если предмета еще нет в списке, добавляем
+    if subject_data not in subjects:
+        subjects.append(subject_data)
+    # Если оба флага False, удаляем предмет из списка
+    elif not subject_data["is_exam"] and not subject_data["is_standard"]:
+        subjects.remove(subject_data)
     
     await state.update_data(subjects=subjects)
-    
     await callback_query.message.edit_text(
-        "Выберите предметы, которые вы преподаете:",
+        "Выберите предметы и типы занятий:",
         reply_markup=get_subjects_keyboard(subjects)
     )
 
@@ -227,6 +243,21 @@ async def save_schedule(callback_query: types.CallbackQuery, state: FSMContext):
     )
     await state.clear()
 
+async def save_subjects(callback_query: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    subjects = data.get("subjects", [])
+    
+    # Проверяем, что хотя бы один предмет выбран с хотя бы одним типом
+    if not any(s["is_exam"] or s["is_standard"] for s in subjects):
+        await callback_query.answer("Пожалуйста, выберите хотя бы один предмет и тип занятий!")
+        return
+    
+    await state.set_state(TutorRegistration.waiting_for_description)
+    await callback_query.message.edit_text(
+        "Отлично! Теперь напишите краткое описание о себе, "
+        "своем опыте преподавания, образовании и методике обучения:"
+    )
+
 def register_registration_handlers(dp):
     dp.callback_query.register(process_start_registration, lambda c: c.data == "start_registration")
     dp.callback_query.register(process_edit_name, lambda c: c.data == "edit_name")
@@ -243,4 +274,5 @@ def register_registration_handlers(dp):
     dp.callback_query.register(set_start_time, lambda c: c.data.startswith("set_start_"))
     dp.callback_query.register(set_end_time, lambda c: c.data.startswith("set_end_"))
     dp.callback_query.register(back_to_schedule, lambda c: c.data == "back_to_schedule")
-    dp.callback_query.register(save_schedule, lambda c: c.data == "save_schedule") 
+    dp.callback_query.register(save_schedule, lambda c: c.data == "save_schedule")
+    dp.callback_query.register(save_subjects, lambda c: c.data == "save_subjects") 

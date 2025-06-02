@@ -15,12 +15,22 @@ async def cmd_start(message: types.Message):
         tutor = tutor.scalar_one_or_none()
         
         if tutor:  # Если нашли репетитора в базе
-            # Формируем текст профиля
-            profile_text = (
-                f"👤 <b>Профиль репетитора</b>\n\n"
+            # Форматируем список предметов с типами
+            subjects_text = []
+            for subject in tutor.subjects:
+                types = []
+                if subject["is_exam"]:
+                    types.append("ОГЭ/ЕГЭ")
+                if subject["is_standard"]:
+                    types.append("Стандарт")
+                subjects_text.append(f"{subject['name']} ({', '.join(types)})")
+            
+            await message.answer(
+                f"👋 Привет, {tutor.name}!\n\n"
+                f"Ваш профиль:\n"
                 f"Имя: {tutor.name}\n"
                 f"Фамилия: {tutor.surname}\n"
-                f"Предметы: {', '.join(tutor.subjects)}\n\n"
+                f"Предметы: {', '.join(subjects_text)}\n\n"
                 f"О себе:\n{tutor.description}\n\n"
                 f"Расписание:\n"
             )
@@ -29,12 +39,11 @@ async def cmd_start(message: types.Message):
             for day_code, day_name in DAY_NAMES.items():
                 day_info = tutor.schedule.get(day_code, {})
                 if day_info.get("active"):
-                    profile_text += f"{day_name}: {day_info['start']} - {day_info['end']}\n"
+                    await message.answer(f"{day_name}: {day_info['start']} - {day_info['end']}")
             
             await message.answer(
-                profile_text,
-                reply_markup=get_main_menu_keyboard(),
-                parse_mode="HTML"
+                "Используйте меню для управления профилем:",
+                reply_markup=get_main_menu_keyboard()
             )
             return
     

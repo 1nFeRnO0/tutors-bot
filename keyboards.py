@@ -11,9 +11,16 @@ DAY_NAMES = {
 }
 
 SUBJECTS = [
-    "Математика", "Физика", "Химия", "Биология", "Информатика",
-    "Русский язык", "Литература", "История", "Обществознание",
-    "Английский язык", "Немецкий язык", "Французский язык"
+    "Математика",
+    "Физика",
+    "Химия",
+    "Биология",
+    "Русский язык",
+    "Литература",
+    "История",
+    "Обществознание",
+    "Английский язык",
+    "Информатика"
 ]
 
 def get_start_keyboard() -> InlineKeyboardMarkup:
@@ -23,16 +30,33 @@ def get_start_keyboard() -> InlineKeyboardMarkup:
     return keyboard
 
 def get_subjects_keyboard(selected_subjects: list) -> InlineKeyboardMarkup:
+    """
+    selected_subjects: [{"name": "Математика", "is_exam": True, "is_standard": True}, ...]
+    """
     keyboard = []
     for subject in SUBJECTS:
-        status = "✅" if subject in selected_subjects else "⬜"
-        keyboard.append([
+        # Находим предмет в выбранных
+        subject_data = next(
+            (s for s in selected_subjects if s["name"] == subject),
+            {"name": subject, "is_exam": False, "is_standard": False}
+        )
+        
+        # Создаем строку с двумя чекбоксами для каждого предмета
+        row = [
             InlineKeyboardButton(
-                text=f"{status} {subject}",
-                callback_data=f"subject_{subject}"
+                text=f"{'✅' if subject_data['is_exam'] else '⬜'} {subject} (ОГЭ/ЕГЭ)",
+                callback_data=f"subject_{subject}_exam"
+            ),
+            InlineKeyboardButton(
+                text=f"{'✅' if subject_data['is_standard'] else '⬜'} {subject} (Стандарт)",
+                callback_data=f"subject_{subject}_standard"
             )
-        ])
-    keyboard.append([InlineKeyboardButton(text="Завершить выбор", callback_data="finish_subjects")])
+        ]
+        keyboard.append(row)
+    
+    keyboard.append([
+        InlineKeyboardButton(text="Сохранить", callback_data="save_subjects")
+    ])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 def get_schedule_table(schedule: dict) -> InlineKeyboardMarkup:
@@ -139,16 +163,33 @@ def get_profile_edit_keyboard(name: str = "", surname: str = "") -> InlineKeyboa
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 def get_profile_subjects_keyboard(selected_subjects: list) -> InlineKeyboardMarkup:
+    """
+    selected_subjects: [{"name": "Математика", "is_exam": True, "is_standard": True}, ...]
+    """
     keyboard = []
     for subject in SUBJECTS:
-        status = "✅" if subject in selected_subjects else "⬜"
-        keyboard.append([
+        # Находим предмет в выбранных
+        subject_data = next(
+            (s for s in selected_subjects if s["name"] == subject),
+            {"name": subject, "is_exam": False, "is_standard": False}
+        )
+        
+        # Создаем строку с двумя чекбоксами для каждого предмета
+        row = [
             InlineKeyboardButton(
-                text=f"{status} {subject}",
-                callback_data=f"profile_subject_{subject}"
+                text=f"{'✅' if subject_data['is_exam'] else '⬜'} {subject} (ОГЭ/ЕГЭ)",
+                callback_data=f"profile_subject_{subject}_exam"
+            ),
+            InlineKeyboardButton(
+                text=f"{'✅' if subject_data['is_standard'] else '⬜'} {subject} (Стандарт)",
+                callback_data=f"profile_subject_{subject}_standard"
             )
-        ])
-    keyboard.append([InlineKeyboardButton(text="Сохранить предметы", callback_data="profile_save_subjects")])
+        ]
+        keyboard.append(row)
+    
+    keyboard.append([
+        InlineKeyboardButton(text="Сохранить", callback_data="profile_save_subjects")
+    ])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 def get_profile_description_keyboard() -> InlineKeyboardMarkup:

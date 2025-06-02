@@ -25,7 +25,6 @@ class ProfileEditing(StatesGroup):
 
 async def show_profile(callback_query: types.CallbackQuery):
     async for session in get_session():
-        # Ищем репетитора по telegram_id
         tutor = await session.execute(
             select(Tutor).where(Tutor.telegram_id == callback_query.from_user.id)
         )
@@ -35,11 +34,21 @@ async def show_profile(callback_query: types.CallbackQuery):
             await callback_query.answer("Профиль не найден!")
             return
         
+        # Форматируем список предметов с типами
+        subjects_text = []
+        for subject in tutor.subjects:
+            types = []
+            if subject["is_exam"]:
+                types.append("ОГЭ/ЕГЭ")
+            if subject["is_standard"]:
+                types.append("Стандарт")
+            subjects_text.append(f"{subject['name']} ({', '.join(types)})")
+        
         profile_text = (
             f"👤 <b>Профиль репетитора</b>\n\n"
             f"Имя: {tutor.name}\n"
             f"Фамилия: {tutor.surname}\n"
-            f"Предметы: {', '.join(tutor.subjects)}\n\n"
+            f"Предметы: {', '.join(subjects_text)}\n\n"
             f"О себе:\n{tutor.description}\n\n"
             f"Расписание:\n"
         )
@@ -164,7 +173,7 @@ async def edit_profile_subjects(callback_query: types.CallbackQuery, state: FSMC
         if tutor:
             await state.update_data(subjects=tutor.subjects)
             await callback_query.message.edit_text(
-                "Выберите предметы, которые вы преподаете:",
+                "Выберите предметы и типы занятий:",
                 reply_markup=get_profile_subjects_keyboard(tutor.subjects)
             )
             await state.set_state(ProfileEditing.editing_subjects)
@@ -173,20 +182,46 @@ async def process_subject_selection(callback_query: types.CallbackQuery, state: 
     current_state = await state.get_state()
     if current_state != ProfileEditing.editing_subjects.state:
         return
-        
-    current_data = await state.get_data()
-    subjects = current_data.get("subjects", [])
     
-    subject = callback_query.data.replace("profile_subject_", "")
-    if subject not in subjects:
-        subjects.append(subject)
+    callback_data = callback_query.data
+    
+    # Игнорируем нажатие на название предмета
+    if callback_data.startswith("subject_name_"):
+        return
+        
+    # Обрабатываем выбор типа занятия
+    if not callback_data.startswith("profile_subject_"):
+        return
+        
+    # profile_subject_Математика_exam или profile_subject_Математика_standard
+    _, _, subject, type_str = callback_data.split("_", 3)
+    is_exam = type_str == "exam"
+    
+    data = await state.get_data()
+    subjects = data.get("subjects", [])
+    
+    # Ищем предмет в списке
+    subject_data = next(
+        (s for s in subjects if s["name"] == subject),
+        {"name": subject, "is_exam": False, "is_standard": False}
+    )
+    
+    # Обновляем соответствующий флаг
+    if is_exam:
+        subject_data["is_exam"] = not subject_data["is_exam"]
     else:
-        subjects.remove(subject)
+        subject_data["is_standard"] = not subject_data["is_standard"]
+    
+    # Если предмета еще нет в списке, добавляем
+    if subject_data not in subjects:
+        subjects.append(subject_data)
+    # Если оба флага False, удаляем предмет из списка
+    elif not subject_data["is_exam"] and not subject_data["is_standard"]:
+        subjects.remove(subject_data)
     
     await state.update_data(subjects=subjects)
-    
     await callback_query.message.edit_text(
-        "Выберите предметы, которые вы преподаете:",
+        "Выберите предметы и типы занятий:",
         reply_markup=get_profile_subjects_keyboard(subjects)
     )
 
@@ -196,8 +231,11 @@ async def save_profile_subjects(callback_query: types.CallbackQuery, state: FSMC
         return
         
     data = await state.get_data()
-    if not data.get("subjects"):
-        await callback_query.answer("Пожалуйста, выберите хотя бы один предмет!")
+    subjects = data.get("subjects", [])
+    
+    # Проверяем, что хотя бы один предмет выбран с хотя бы одним типом
+    if not any(s["is_exam"] or s["is_standard"] for s in subjects):
+        await callback_query.answer("Пожалуйста, выберите хотя бы один предмет и тип занятий!")
         return
     
     async for session in get_session():
@@ -206,7 +244,7 @@ async def save_profile_subjects(callback_query: types.CallbackQuery, state: FSMC
         )
         tutor = tutor.scalar_one_or_none()
         if tutor:
-            tutor.subjects = data["subjects"]
+            tutor.subjects = subjects
             await session.commit()
     
     await callback_query.message.edit_text(
