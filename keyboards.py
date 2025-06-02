@@ -59,7 +59,7 @@ def get_subjects_keyboard(selected_subjects: list) -> InlineKeyboardMarkup:
         keyboard.append(row)
     
     keyboard.append([
-        InlineKeyboardButton(text="Сохранить", callback_data="save_subjects")
+        InlineKeyboardButton(text="💾 Сохранить", callback_data="registration_finish_subjects")
     ])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
@@ -139,6 +139,7 @@ def get_profile_menu_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [InlineKeyboardButton(text="👤 Изменить имя и фамилию", callback_data="edit_profile_name")],
         [InlineKeyboardButton(text="📚 Изменить предметы", callback_data="edit_profile_subjects")],
+        [InlineKeyboardButton(text="💰 Изменить цены", callback_data="edit_profile_prices")],
         [InlineKeyboardButton(text="📝 Изменить описание", callback_data="edit_profile_description")],
         [InlineKeyboardButton(text="🕒 Изменить расписание", callback_data="edit_profile_schedule")],
         [InlineKeyboardButton(text="◀️ Вернуться в главное меню", callback_data="back_to_main")]
@@ -266,4 +267,110 @@ def get_profile_minute_keyboard(day_code: str, time_type: str, hour: int) -> Inl
     if row:
         keyboard.append(row)
     keyboard.append([InlineKeyboardButton(text="◀️ Отмена", callback_data="profile_cancel_time")])
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+def get_profile_prices_keyboard(subjects: list) -> InlineKeyboardMarkup:
+    """
+    subjects: [{"name": "Математика", "is_exam": True, "is_standard": True, "exam_price": 2000, "standard_price": 1500}, ...]
+    """
+    keyboard = []
+    
+    # Заголовок таблицы
+    keyboard.append([
+        InlineKeyboardButton(text="📚 Предмет", callback_data="price_header"),
+        InlineKeyboardButton(text="📖 ОГЭ/ЕГЭ", callback_data="price_header"),
+        InlineKeyboardButton(text="📚 Стандарт", callback_data="price_header")
+    ])
+    
+    # Разделитель
+    keyboard.append([
+        InlineKeyboardButton(text="─────────────", callback_data="price_header"),
+        InlineKeyboardButton(text="─────────────", callback_data="price_header"),
+        InlineKeyboardButton(text="─────────────", callback_data="price_header")
+    ])
+    
+    # Строки с предметами и ценами
+    for subject_data in subjects:
+        subject = subject_data["name"]
+        exam_price = subject_data.get("exam_price", 0) if subject_data["is_exam"] else "—"
+        standard_price = subject_data.get("standard_price", 0) if subject_data["is_standard"] else "—"
+        
+        row = [
+            InlineKeyboardButton(
+                text=f"{subject}",
+                callback_data=f"price_subject_{subject}"
+            ),
+            InlineKeyboardButton(
+                text=f"{exam_price}₽" if isinstance(exam_price, int) else exam_price,
+                callback_data=f"price_edit_{subject}_exam" if subject_data["is_exam"] else "price_header"
+            ),
+            InlineKeyboardButton(
+                text=f"{standard_price}₽" if isinstance(standard_price, int) else standard_price,
+                callback_data=f"price_edit_{subject}_standard" if subject_data["is_standard"] else "price_header"
+            )
+        ]
+        keyboard.append(row)
+    
+    # Кнопки управления
+    keyboard.append([
+        InlineKeyboardButton(text="💾 Сохранить цены", callback_data="price_save"),
+        InlineKeyboardButton(text="◀️ Отмена", callback_data="price_cancel")
+    ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+def get_registration_prices_keyboard(subjects: list) -> InlineKeyboardMarkup:
+    """
+    subjects: [{"name": "Математика", "is_exam": True, "is_standard": True, "exam_price": 2000, "standard_price": 1500}, ...]
+    """
+    keyboard = []
+    
+    # Заголовок таблицы
+    keyboard.append([
+        InlineKeyboardButton(text="📚 Предмет", callback_data="price_header"),
+        InlineKeyboardButton(text="📖 ОГЭ/ЕГЭ", callback_data="price_header"),
+        InlineKeyboardButton(text="📚 Стандарт", callback_data="price_header")
+    ])
+    
+    # Разделитель
+    keyboard.append([
+        InlineKeyboardButton(text="─────────────", callback_data="price_header"),
+        InlineKeyboardButton(text="─────────────", callback_data="price_header"),
+        InlineKeyboardButton(text="─────────────", callback_data="price_header")
+    ])
+    
+    # Строки с предметами и ценами
+    for subject_data in subjects:
+        subject = subject_data["name"]
+        exam_price = subject_data.get("exam_price", 0) if subject_data["is_exam"] else "—"
+        standard_price = subject_data.get("standard_price", 0) if subject_data["is_standard"] else "—"
+        
+        row = [
+            InlineKeyboardButton(
+                text=f"{subject}",
+                callback_data=f"registration_price_subject_{subject}"
+            ),
+            InlineKeyboardButton(
+                text=f"{exam_price}₽" if isinstance(exam_price, int) else exam_price,
+                callback_data=f"registration_price_edit_{subject}_exam" if subject_data["is_exam"] else "price_header"
+            ),
+            InlineKeyboardButton(
+                text=f"{standard_price}₽" if isinstance(standard_price, int) else standard_price,
+                callback_data=f"registration_price_edit_{subject}_standard" if subject_data["is_standard"] else "price_header"
+            )
+        ]
+        keyboard.append(row)
+    
+    # Кнопки управления
+    keyboard.append([
+        InlineKeyboardButton(text="💾 Сохранить цены", callback_data="registration_price_save"),
+        InlineKeyboardButton(text="◀️ Назад", callback_data="registration_price_back")
+    ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+def get_registration_description_keyboard() -> InlineKeyboardMarkup:
+    keyboard = [
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="registration_description_back")]
+    ]
     return InlineKeyboardMarkup(inline_keyboard=keyboard)

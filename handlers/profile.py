@@ -2,6 +2,7 @@ from aiogram import types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy import select
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from database import Tutor, get_session
 from keyboards import (
@@ -13,13 +14,15 @@ from keyboards import (
     get_profile_schedule_keyboard,
     get_profile_hour_keyboard,
     get_profile_minute_keyboard,
-    DAY_NAMES
+    DAY_NAMES,
+    get_profile_prices_keyboard
 )
 
 class ProfileEditing(StatesGroup):
     editing_name = State()
     editing_surname = State()
     editing_subjects = State()
+    editing_prices = State()
     editing_description = State()
     editing_schedule = State()
 
@@ -34,21 +37,23 @@ async def show_profile(callback_query: types.CallbackQuery):
             await callback_query.answer("❌ Профиль не найден!")
             return
         
-        # Форматируем список предметов с типами
+        # Форматируем список предметов с типами и ценами
         subjects_text = []
         for subject in tutor.subjects:
             types = []
             if subject["is_exam"]:
-                types.append("📚 ОГЭ/ЕГЭ")
+                price = subject.get("exam_price", 0)
+                types.append(f"📚 ОГЭ/ЕГЭ: {price}₽/час")
             if subject["is_standard"]:
-                types.append("📖 Стандарт")
-            subjects_text.append(f"{subject['name']} ({', '.join(types)})")
+                price = subject.get("standard_price", 0)
+                types.append(f"📖 Стандарт: {price}₽/час")
+            subjects_text.append(f"• {subject['name']}\n  {'\n  '.join(types)}")
         
         profile_text = (
             f"👤 <b>Профиль репетитора</b>\n\n"
             f"👤 Имя: {tutor.name}\n"
-            f"👤 Фамилия: {tutor.surname}\n"
-            f"📚 Предметы: {', '.join(subjects_text)}\n\n"
+            f"👤 Фамилия: {tutor.surname}\n\n"
+            f"📚 <b>Предметы и цены:</b>\n{chr(10).join(subjects_text)}\n\n"
             f"📝 <b>О себе:</b>\n{tutor.description}\n\n"
             f"🕒 <b>Расписание:</b>\n"
         )
@@ -488,6 +493,122 @@ async def save_profile_schedule(callback_query: types.CallbackQuery, state: FSMC
     )
     await state.clear()
 
+async def edit_profile_prices(callback_query: types.CallbackQuery, state: FSMContext):
+    async for session in get_session():
+        tutor = await session.execute(
+            select(Tutor).where(Tutor.telegram_id == callback_query.from_user.id)
+        )
+        tutor = tutor.scalar_one_or_none()
+        if tutor:
+            await state.update_data(subjects=tutor.subjects)
+            await callback_query.message.edit_text(
+                "💰 Установите цены для каждого типа занятий:\n"
+                "Нажмите на цену, чтобы изменить её",
+                reply_markup=get_profile_prices_keyboard(tutor.subjects)
+            )
+            await state.set_state(ProfileEditing.editing_prices)
+
+async def process_price_edit(callback_query: types.CallbackQuery, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state != ProfileEditing.editing_prices.state:
+        return
+        
+    # price_edit_Математика_exam или price_edit_Математика_standard
+    _, _, subject, price_type = callback_query.data.split("_", 3)
+    
+    await state.update_data(
+        current_subject=subject,
+        current_price_type=price_type
+    )
+    
+    await callback_query.message.edit_text(
+        f"💰 Введите новую цену для {subject} ({'ОГЭ/ЕГЭ' if price_type == 'exam' else 'Стандарт'}):\n"
+        "Цена указывается в рублях за час (только число)",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Отмена", callback_data="price_cancel_edit")]
+        ])
+    )
+
+async def process_price_input(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state != ProfileEditing.editing_prices.state:
+        return
+        
+    try:
+        price = int(message.text)
+        if price <= 0:
+            raise ValueError("Цена должна быть положительным числом")
+    except ValueError:
+        await message.answer(
+            "❌ Пожалуйста, введите корректную цену (положительное целое число):",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Отмена", callback_data="price_cancel_edit")]
+            ])
+        )
+        return
+    
+    data = await state.get_data()
+    subjects = data.get("subjects", [])
+    subject = data.get("current_subject")
+    price_type = data.get("current_price_type")
+    
+    # Обновляем цену
+    for subject_data in subjects:
+        if subject_data["name"] == subject:
+            if price_type == "exam":
+                subject_data["exam_price"] = price
+            else:
+                subject_data["standard_price"] = price
+            break
+    
+    await state.update_data(subjects=subjects)
+    await message.answer(
+        "💰 Установите цены для каждого типа занятий:\n"
+        "Нажмите на цену, чтобы изменить её",
+        reply_markup=get_profile_prices_keyboard(subjects)
+    )
+
+async def cancel_price_edit(callback_query: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    subjects = data.get("subjects", [])
+    await callback_query.message.edit_text(
+        "💰 Установите цены для каждого типа занятий:\n"
+        "Нажмите на цену, чтобы изменить её",
+        reply_markup=get_profile_prices_keyboard(subjects)
+    )
+
+async def save_profile_prices(callback_query: types.CallbackQuery, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state != ProfileEditing.editing_prices.state:
+        return
+        
+    data = await state.get_data()
+    subjects = data.get("subjects", [])
+    
+    # Проверяем, что все активные типы занятий имеют цены
+    for subject in subjects:
+        if subject["is_exam"] and not subject.get("exam_price"):
+            await callback_query.answer(f"❌ Укажите цену для ОГЭ/ЕГЭ по предмету {subject['name']}")
+            return
+        if subject["is_standard"] and not subject.get("standard_price"):
+            await callback_query.answer(f"❌ Укажите цену для Стандарт по предмету {subject['name']}")
+            return
+    
+    async for session in get_session():
+        tutor = await session.execute(
+            select(Tutor).where(Tutor.telegram_id == callback_query.from_user.id)
+        )
+        tutor = tutor.scalar_one_or_none()
+        if tutor:
+            tutor.subjects = subjects
+            await session.commit()
+    
+    await callback_query.message.edit_text(
+        "✅ Цены успешно обновлены!",
+        reply_markup=get_profile_menu_keyboard()
+    )
+    await state.clear()
+
 def register_profile_handlers(dp):
     dp.callback_query.register(show_profile, lambda c: c.data == "my_profile")
     dp.callback_query.register(show_edit_menu, lambda c: c.data == "edit_profile")
@@ -521,4 +642,11 @@ def register_profile_handlers(dp):
     dp.callback_query.register(process_profile_minute, lambda c: c.data.startswith("profile_minute_"))
     dp.callback_query.register(cancel_schedule_edit, lambda c: c.data == "profile_cancel_schedule")
     dp.callback_query.register(cancel_time_edit, lambda c: c.data == "profile_cancel_time")
-    dp.callback_query.register(save_profile_schedule, lambda c: c.data == "profile_save_schedule") 
+    dp.callback_query.register(save_profile_schedule, lambda c: c.data == "profile_save_schedule")
+    
+    # Обработчики для редактирования цен
+    dp.callback_query.register(edit_profile_prices, lambda c: c.data == "edit_profile_prices")
+    dp.callback_query.register(process_price_edit, lambda c: c.data.startswith("price_edit_"))
+    dp.callback_query.register(cancel_price_edit, lambda c: c.data == "price_cancel_edit")
+    dp.callback_query.register(save_profile_prices, lambda c: c.data == "price_save")
+    dp.message.register(process_price_input, ProfileEditing.editing_prices) 
