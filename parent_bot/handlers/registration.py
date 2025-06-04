@@ -5,8 +5,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy.ext.asyncio import AsyncSession
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+import re
 
-from parent_bot.keyboards import get_registration_form_keyboard, get_registration_menu_keyboard
+from parent_bot.keyboards import get_registration_form_keyboard, get_registration_menu_keyboard, get_main_menu_keyboard
 from common.database import Parent, get_session
 
 router = Router()
@@ -17,6 +18,21 @@ class ParentRegistration(StatesGroup):
     waiting_for_name_input = State()
     waiting_for_surname_input = State()
     waiting_for_patronymic_input = State()
+    waiting_for_phone = State()
+
+def validate_phone(phone: str) -> bool:
+    """Проверяет корректность номера телефона"""
+    # Удаляем все не цифры из номера
+    cleaned_phone = re.sub(r'\D', '', phone)
+    # Проверяем что длина 11 цифр и начинается с 7 или 8
+    return len(cleaned_phone) == 11 and cleaned_phone[0] in ('7', '8')
+
+def format_phone(phone: str) -> str:
+    """Форматирует номер телефона в красивый вид"""
+    cleaned_phone = re.sub(r'\D', '', phone)
+    if cleaned_phone[0] == '8':
+        cleaned_phone = '7' + cleaned_phone[1:]
+    return f"+{cleaned_phone[0]} ({cleaned_phone[1:4]}) {cleaned_phone[4:7]}-{cleaned_phone[7:9]}-{cleaned_phone[9:11]}"
 
 async def process_start_registration(callback_query: CallbackQuery, state: FSMContext):
     await callback_query.message.edit_text(
@@ -97,25 +113,43 @@ async def process_finish_name_surname(callback_query: CallbackQuery, state: FSMC
         await callback_query.answer("Пожалуйста, заполните имя и фамилию!")
         return
     
+    await callback_query.message.edit_text(
+        "📱 Введите ваш номер телефона в любом формате:\n"
+        "Например: +79991234567 или 89991234567"
+    )
+    await state.set_state(ParentRegistration.waiting_for_phone)
+
+async def process_phone_input(message: Message, state: FSMContext):
+    if not validate_phone(message.text):
+        await message.answer(
+            "❌ Неверный формат номера телефона!\n"
+            "Введите номер в формате: +79991234567 или 89991234567"
+        )
+        return
+
+    data = await state.get_data()
+    formatted_phone = format_phone(message.text)
+    
     # Создаем запись в базе данных
     async for session in get_session():
         parent = Parent(
-            telegram_id=callback_query.from_user.id,
+            telegram_id=message.from_user.id,
             name=data["name"],
             surname=data["surname"],
             patronymic=data.get("patronymic"),
-            phone=None  # Телефон будем запрашивать отдельно
+            phone=formatted_phone
         )
         session.add(parent)
         await session.commit()
     
-    await callback_query.message.edit_text(
+    await message.answer(
         "🎉 Регистрация успешно завершена!\n\n"
         "Чтобы записаться ребенка к репетитору:\n"
-        "1. Добавить данные ребенка в настройках профиля\n"
+        "1. Добавьте данные ребенка в настройках профиля\n"
         "2. Найдите нужного репетитора\n"
         "3. Запишитесь на занятие\n\n"
-        "Используйте команду /start для управления профилем."
+        "Используйте меню для управления профилем.",
+        reply_markup=get_main_menu_keyboard()
     )
     await state.clear()
 
@@ -127,5 +161,6 @@ def register_registration_handlers(dp):
     dp.message.register(process_name_input, ParentRegistration.waiting_for_name_input)
     dp.message.register(process_surname_input, ParentRegistration.waiting_for_surname_input)
     dp.message.register(process_patronymic_input, ParentRegistration.waiting_for_patronymic_input)
+    dp.message.register(process_phone_input, ParentRegistration.waiting_for_phone)
     dp.callback_query.register(process_finish_name_surname, lambda c: c.data == "finish_name_surname")
     dp.callback_query.register(skip_patronymic, lambda c: c.data == "skip_patronymic") 

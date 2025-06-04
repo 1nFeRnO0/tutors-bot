@@ -1,4 +1,5 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from common.database import Child, Gender
 
 def get_start_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура для начала регистрации"""
@@ -55,4 +56,92 @@ def get_registration_menu_keyboard(name: str = "", surname: str = "", patronymic
         ],
         [InlineKeyboardButton(text="Продолжить", callback_data="finish_registration")]
     ]
-    return InlineKeyboardMarkup(inline_keyboard=keyboard) 
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+def get_children_list_keyboard(children: list[Child]) -> InlineKeyboardMarkup:
+    """Создает клавиатуру со списком детей и кнопками управления"""
+    keyboard = []
+    
+    for child in children:
+        # Формируем ФИО ребенка
+        child_name = f"{child.name} {child.surname}"
+        if child.patronymic:
+            child_name = f"{child.name} {child.patronymic} {child.surname}"
+            
+        # Добавляем строку с именем и кнопками управления
+        keyboard.append([
+            InlineKeyboardButton(text=child_name, callback_data=f"child_info_{child.id}"),
+            InlineKeyboardButton(text="✏️", callback_data=f"edit_child_{child.id}"),
+            InlineKeyboardButton(text="❌", callback_data=f"delete_child_{child.id}")
+        ])
+    
+    # Добавляем кнопку добавления нового ребенка
+    keyboard.append([InlineKeyboardButton(text="➕ Добавить ребенка", callback_data="add_child")])
+    
+    # Добавляем кнопку возврата в главное меню
+    keyboard.append([InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+def get_gender_keyboard(selected_gender: Gender = None, is_edit: bool = False) -> InlineKeyboardMarkup:
+    """Создает клавиатуру для выбора пола"""
+    prefix = "edit_gender" if is_edit else "add_gender"
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text=f"{'✓ ' if selected_gender == Gender.MALE else ''}М", 
+                callback_data=f"{prefix}_M"
+            ),
+            InlineKeyboardButton(
+                text=f"{'✓ ' if selected_gender == Gender.FEMALE else ''}Ж", 
+                callback_data=f"{prefix}_F"
+            )
+        ]
+    ])
+
+def get_grade_keyboard(selected_grade: int = None, is_edit: bool = False) -> InlineKeyboardMarkup:
+    """Создает клавиатуру для выбора класса"""
+    prefix = "edit_grade" if is_edit else "add_grade"
+    keyboard = []
+    row = []
+    for grade in range(1, 12):
+        row.append(InlineKeyboardButton(
+            text=f"{'✓ ' if grade == selected_grade else ''}{grade}",
+            callback_data=f"{prefix}_{grade}"
+        ))
+        if len(row) == 4:  # По 4 кнопки в ряду
+            keyboard.append(row)
+            row = []
+    if row:  # Добавляем оставшиеся кнопки
+        keyboard.append(row)
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+def get_child_edit_keyboard(child: Child) -> InlineKeyboardMarkup:
+    """Создает клавиатуру для редактирования данных ребенка"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="ФИО", callback_data="edit_fio")],
+        [
+            InlineKeyboardButton(text="Класс", callback_data="edit_grade"),
+            InlineKeyboardButton(text=str(child.grade), callback_data="edit_grade")
+        ],
+        [InlineKeyboardButton(text="📚 Изменить учебник", callback_data="edit_textbook")],
+        [InlineKeyboardButton(text="◀️ Назад к списку", callback_data="show_children")]
+    ])
+
+def get_fio_edit_keyboard(child: Child) -> InlineKeyboardMarkup:
+    """Создает клавиатуру для редактирования ФИО"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="Имя", callback_data="child_edit_name"),
+            InlineKeyboardButton(text=child.name or "Не указано", callback_data="child_edit_name")
+        ],
+        [
+            InlineKeyboardButton(text="Фамилия", callback_data="child_edit_surname"),
+            InlineKeyboardButton(text=child.surname or "Не указано", callback_data="child_edit_surname")
+        ],
+        [
+            InlineKeyboardButton(text="Отчество", callback_data="child_edit_patronymic"),
+            InlineKeyboardButton(text=child.patronymic or "Не указано", callback_data="child_edit_patronymic")
+        ],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="edit_back")]
+    ]) 
