@@ -18,6 +18,16 @@ class Tutor(Base):
     schedule = Column(JSON)  # Расписание в формате {день: [время]}
     description = Column(String)  # Описание репетитора
 
+class Parent(Base):
+    __tablename__ = 'parents'
+
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(Integer, unique=True)
+    name = Column(String)
+    surname = Column(String)
+    patronymic = Column(String, nullable=True)
+    phone = Column(String, nullable=True)  # Телефон будем запрашивать позже
+
 # Создаем асинхронный движок для работы с базой данных
 engine = create_async_engine('sqlite+aiosqlite:///tutors.db', echo=True)
 

@@ -134,9 +134,11 @@ def get_registration_form_keyboard(name: str = "", surname: str = "", patronymic
         [
             InlineKeyboardButton(text="Отчество", callback_data="edit_patronymic"),
             InlineKeyboardButton(text=patronymic or "Не указано", callback_data="edit_patronymic")
-        ],
-        [InlineKeyboardButton(text="Продолжить", callback_data="finish_name_surname")]
+        ]
     ]
+
+    if name and surname:
+        keyboard.append([InlineKeyboardButton(text="✅ Продолжить", callback_data="finish_name_surname")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 def get_profile_menu_keyboard() -> InlineKeyboardMarkup:

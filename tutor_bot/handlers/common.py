@@ -3,8 +3,8 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy import select
 
-from database import Tutor, get_session
-from keyboards import get_start_keyboard, get_main_menu_keyboard, DAY_NAMES
+from common.database import Tutor, get_session
+from tutor_bot.keyboards import get_start_keyboard, get_main_menu_keyboard, DAY_NAMES
 
 async def cmd_start(message: types.Message):
     async for session in get_session():

@@ -3,17 +3,17 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from config import BOT_TOKEN
-from database import init_db
-from handlers.common import register_common_handlers
-from handlers.registration import register_registration_handlers
-from handlers.profile import register_profile_handlers
+from common.config import TUTOR_BOT_TOKEN, PARENT_BOT_TOKEN
+from common.database import init_db
+from tutor_bot.handlers.common import register_common_handlers
+from tutor_bot.handlers.registration import register_registration_handlers
+from tutor_bot.handlers.profile import register_profile_handlers
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 
 # Инициализация бота и диспетчера
-bot = Bot(token=BOT_TOKEN)
+bot = Bot(token=TUTOR_BOT_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 

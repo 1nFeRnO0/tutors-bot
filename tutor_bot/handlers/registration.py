@@ -4,8 +4,8 @@ from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy import select
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-from database import Tutor, get_session
-from keyboards import (
+from common.database import Tutor, get_session
+from tutor_bot.keyboards import (
     get_registration_form_keyboard,
     get_subjects_keyboard,
     get_schedule_table,
@@ -16,7 +16,7 @@ from keyboards import (
     get_registration_description_keyboard
 )
 
-from handlers.profile import show_profile
+from tutor_bot.handlers.profile import show_profile
 
 class TutorRegistration(StatesGroup):
     waiting_for_name_surname = State()

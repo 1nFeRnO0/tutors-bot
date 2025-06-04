@@ -4,8 +4,8 @@ from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy import select
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-from database import Tutor, get_session
-from keyboards import (
+from common.database import Tutor, get_session
+from tutor_bot.keyboards import (
     get_main_menu_keyboard,
     get_profile_menu_keyboard,
     get_profile_edit_keyboard,
