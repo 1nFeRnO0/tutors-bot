@@ -8,6 +8,7 @@ from parent_bot.handlers.registration import register_registration_handlers
 from parent_bot.handlers.common import register_common_handlers
 from parent_bot.handlers.profile import register_profile_handlers
 from parent_bot.handlers.children import register_children_handlers
+from parent_bot.handlers.tutors import register_tutors_handlers
 from common.database import init_db
 
 # Настройка логирования
@@ -26,7 +27,7 @@ async def main():
     register_registration_handlers(dp)
     register_profile_handlers(dp)
     register_children_handlers(dp)
-    
+    register_tutors_handlers(dp)
     # Запуск бота
     await dp.start_polling(bot)
 

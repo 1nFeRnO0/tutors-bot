@@ -12,7 +12,7 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👤 Профиль", callback_data="profile")],
         [InlineKeyboardButton(text="👶 Мои дети", callback_data="children")],
-        [InlineKeyboardButton(text="🔍 Найти репетитора", callback_data="find_tutor")],
+        [InlineKeyboardButton(text="🔍 Мои репетиторы", callback_data="tutors")],
         [InlineKeyboardButton(text="📅 Мои записи", callback_data="my_bookings")]
     ])
 
@@ -144,4 +144,37 @@ def get_fio_edit_keyboard(child: Child) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text=child.patronymic or "Не указано", callback_data="child_edit_patronymic")
         ],
         [InlineKeyboardButton(text="◀️ Назад", callback_data="edit_back")]
+    ])
+
+def get_tutors_list_keyboard(tutors: list) -> InlineKeyboardMarkup:
+    """Создает клавиатуру со списком репетиторов и кнопками управления"""
+    keyboard = []
+    
+    for tutor in tutors:
+        # Формируем ФИО репетитора
+        tutor_name = f"{tutor.name} {tutor.surname}"
+        if tutor.patronymic:
+            tutor_name = f"{tutor.name} {tutor.patronymic} {tutor.surname}"
+            
+        # Добавляем строку с именем и кнопкой удаления
+        keyboard.append([
+            InlineKeyboardButton(text=tutor_name, callback_data=f"favorite_tutor_info_{tutor.id}"),
+            InlineKeyboardButton(text="❌", callback_data=f"favorite_delete_tutor_{tutor.id}")
+        ])
+    
+    # Добавляем кнопку добавления нового репетитора
+    keyboard.append([InlineKeyboardButton(text="➕ Добавить репетитора", callback_data="add_tutor")])
+    
+    # Добавляем кнопку возврата в главное меню
+    keyboard.append([InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+def get_confirm_delete_tutor_keyboard(tutor_id: int) -> InlineKeyboardMarkup:
+    """Создает клавиатуру для подтверждения удаления репетитора"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="Да", callback_data=f"favorite_confirm_delete_tutor_{tutor_id}"),
+            InlineKeyboardButton(text="Нет", callback_data="tutors")
+        ]
     ]) 
