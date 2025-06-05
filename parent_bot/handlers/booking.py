@@ -379,7 +379,7 @@ async def process_tutor_selection(callback_query: types.CallbackQuery, state: FS
 
 async def process_subject_selection(callback_query: types.CallbackQuery, state: FSMContext):
     """Обрабатывает выбор предмета"""
-    subject_name = callback_query.data.split('_')[-1]
+    subject_name = callback_query.data.split('_')[2]
     state_data = await state.get_data()
     
     # Находим выбранный предмет в списке предметов репетитора
@@ -404,26 +404,8 @@ async def process_subject_selection(callback_query: types.CallbackQuery, state: 
         subject_info=subject
     )
     
-    # Создаем клавиатуру только с доступными типами занятий
-    keyboard = []
-    if subject.get('is_standard'):
-        keyboard.append([
-            InlineKeyboardButton(
-                text=f"📚 Стандартное занятие ({subject['standard_price']} ₽)",
-                callback_data="book_type_standard"
-            )
-        ])
-    if subject.get('is_exam'):
-        keyboard.append([
-            InlineKeyboardButton(
-                text=f"📝 Подготовка к экзамену ({subject['exam_price']} ₽)",
-                callback_data="book_type_exam"
-            )
-        ])
-    
-    # Добавляем кнопки навигации
-    keyboard.append([InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_tutor_selection")])
-    keyboard.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_booking")])
+    # Получаем клавиатуру и текст сообщения
+    keyboard, text = get_lesson_type_keyboard(subject)
     
     # Получаем информацию о ребенке и репетиторе для сообщения
     async with async_session_maker() as session:
@@ -447,21 +429,17 @@ async def process_subject_selection(callback_query: types.CallbackQuery, state: 
             await state.clear()
             return
         
-        # Формируем сообщение
+        # Формируем полное сообщение
         message_text = (
-            f"Выберите тип занятия:\n\n"
             f"👤 Ученик: {child.name}\n"
             f"👨‍🏫 Репетитор: {tutor.name} {tutor.surname}\n"
-            f"📚 Предмет: {subject_name}\n\n"
-            f"Доступные типы занятий:"
+            f"{text}"
         )
         
         await callback_query.message.edit_text(
             message_text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+            reply_markup=keyboard
         )
-        
-        # Переходим к следующему состоянию
         await state.set_state(BookingStates.waiting_for_lesson_type)
 
 async def process_lesson_type_selection(callback_query: types.CallbackQuery, state: FSMContext):
@@ -1160,6 +1138,95 @@ async def confirm_cancel_booking(callback_query: types.CallbackQuery):
                 ])
             )
 
+async def back_to_date_selection(callback_query: types.CallbackQuery, state: FSMContext):
+    """Возвращает к выбору даты"""
+    data = await state.get_data()
+    
+    # Получаем сохраненные данные
+    tutor_id = data.get('tutor_id')
+    lesson_type = data.get('lesson_type')
+    lesson_duration = LESSON_DURATIONS[lesson_type]
+    
+    # Получаем репетитора и его расписание
+    async with async_session_maker() as session:
+        tutor = await session.execute(
+            select(Tutor).where(Tutor.id == tutor_id)
+        )
+        tutor = tutor.scalar_one_or_none()
+        
+        if not tutor or not tutor.schedule:
+            await callback_query.message.edit_text(
+                "❌ Ошибка: не удалось получить расписание репетитора.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
+                ])
+            )
+            return
+        
+        # Получаем доступные даты
+        today = datetime.now().date()
+        end_date = today + timedelta(days=30)  # На месяц вперед
+        available_dates = await get_available_dates(
+            tutor.schedule,
+            tutor_id,
+            lesson_duration,
+            today,
+            end_date
+        )
+        
+        # Создаем календарь
+        await callback_query.message.edit_text(
+            "📅 Выберите дату занятия:",
+            reply_markup=create_calendar_keyboard(
+                today.year,
+                today.month,
+                available_dates
+            )
+        )
+        await state.set_state(BookingStates.waiting_for_date)
+
+async def back_to_lesson_type(callback_query: types.CallbackQuery, state: FSMContext):
+    """Возвращает к выбору типа занятия"""
+    data = await state.get_data()
+    subject_info = data.get('subject_info')
+    
+    keyboard, text = get_lesson_type_keyboard(subject_info)
+    
+    # Получаем информацию о ребенке и репетиторе
+    async with async_session_maker() as session:
+        child = await session.execute(
+            select(Child).where(Child.id == data['child_id'])
+        )
+        child = child.scalar_one_or_none()
+        
+        tutor = await session.execute(
+            select(Tutor).where(Tutor.id == data['tutor_id'])
+        )
+        tutor = tutor.scalar_one_or_none()
+        
+        if not child or not tutor:
+            await callback_query.message.edit_text(
+                "Ошибка: не удалось получить данные. Попробуйте начать сначала.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
+                ])
+            )
+            await state.clear()
+            return
+        
+        # Формируем полное сообщение
+        message_text = (
+            f"👤 Ученик: {child.name}\n"
+            f"👨‍🏫 Репетитор: {tutor.name} {tutor.surname}\n"
+            f"{text}"
+        )
+        
+        await callback_query.message.edit_text(
+            message_text,
+            reply_markup=keyboard
+        )
+        await state.set_state(BookingStates.waiting_for_lesson_type)
+
 def register_booking_handlers(dp):
     """Регистрирует обработчики для процесса бронирования"""
     dp.callback_query.register(show_bookings, lambda c: c.data == "my_bookings")
@@ -1177,4 +1244,6 @@ def register_booking_handlers(dp):
     dp.callback_query.register(back_to_child_selection, lambda c: c.data == "back_to_child_selection")
     dp.callback_query.register(back_to_tutor_selection, lambda c: c.data == "back_to_tutor_selection")
     dp.callback_query.register(back_to_subject_selection, lambda c: c.data == "back_to_subject_selection")
+    dp.callback_query.register(back_to_lesson_type, lambda c: c.data == "back_to_lesson_type")
+    dp.callback_query.register(back_to_date_selection, lambda c: c.data == "back_to_date_selection")
     dp.callback_query.register(cancel_booking, lambda c: c.data == "cancel_booking") 

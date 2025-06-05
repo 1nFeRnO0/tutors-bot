@@ -62,17 +62,61 @@ def get_subjects_keyboard(subjects: List[Dict[str, Any]]) -> InlineKeyboardMarku
     keyboard.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_booking")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
-def get_lesson_type_keyboard() -> InlineKeyboardMarkup:
-    """Создает клавиатуру с типами занятий"""
-    keyboard = [
-        [
+def get_lesson_type_keyboard(subject_info: dict = None) -> tuple:
+    """
+    Создает клавиатуру с типами занятий
+    
+    Args:
+        subject_info (dict, optional): Информация о предмете с ценами и доступными типами занятий
+            {
+                'name': str,
+                'is_standard': bool,
+                'is_exam': bool,
+                'standard_price': int,
+                'exam_price': int
+            }
+    
+    Returns:
+        tuple: (InlineKeyboardMarkup, str) - клавиатура и текст сообщения
+    """
+    keyboard = []
+    
+    if subject_info:
+        # Добавляем только доступные типы занятий с ценами
+        if subject_info.get('is_standard'):
+            keyboard.append([
+                InlineKeyboardButton(
+                    text=f"📚 Стандартное занятие ({subject_info['standard_price']} ₽)",
+                    callback_data="book_type_standard"
+                )
+            ])
+        if subject_info.get('is_exam'):
+            keyboard.append([
+                InlineKeyboardButton(
+                    text=f"📝 Подготовка к экзамену ({subject_info['exam_price']} ₽)",
+                    callback_data="book_type_exam"
+                )
+            ])
+    else:
+        # Базовая клавиатура без цен
+        keyboard.append([
             InlineKeyboardButton(text="📚 Стандартное занятие", callback_data="book_type_standard"),
             InlineKeyboardButton(text="📝 Подготовка к экзамену", callback_data="book_type_exam")
-        ],
-        [InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_subject_selection")],
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_booking")]
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+        ])
+    
+    # Добавляем кнопки навигации
+    keyboard.append([InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_subject_selection")])
+    keyboard.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_booking")])
+    
+    # Формируем текст сообщения
+    message_text = "Выберите тип занятия:"
+    if subject_info:
+        message_text = (
+            f"📚 Предмет: {subject_info['name']}\n\n"
+            "Выберите тип занятия:"
+        )
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard), message_text
 
 def create_calendar_keyboard(year: int, month: int, available_dates: List[datetime.date]) -> InlineKeyboardMarkup:
     """

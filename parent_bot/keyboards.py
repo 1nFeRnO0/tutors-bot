@@ -56,7 +56,7 @@ def get_registration_menu_keyboard(name: str = "", surname: str = "", patronymic
         ],
         [InlineKeyboardButton(text="Продолжить", callback_data="finish_registration")]
     ]
-    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+    return InlineKeyboardMarkup(inline_keyboard=keyboard) 
 
 def get_children_list_keyboard(children: list[Child]) -> InlineKeyboardMarkup:
     """Создает клавиатуру со списком детей и кнопками управления"""
