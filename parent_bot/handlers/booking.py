@@ -137,68 +137,56 @@ async def is_date_available(date: datetime.date, tutor_id: int, lesson_duration:
     pass
 
 async def show_bookings(callback_query: types.CallbackQuery):
-    """Показывает список записей пользователя"""
+    """Показывает активные записи пользователя (ожидающие и подтвержденные)"""
     async with async_session_maker() as session:
-        # Получаем родителя со всеми связанными данными
+        # Получаем данные о родителе
         parent = await session.execute(
             select(Parent)
             .options(
                 selectinload(Parent.bookings)
-                .selectinload(Booking.child),
+                .selectinload(Booking.tutor),
                 selectinload(Parent.bookings)
-                .selectinload(Booking.tutor)
+                .selectinload(Booking.child)
             )
             .where(Parent.telegram_id == callback_query.from_user.id)
         )
         parent = parent.scalar_one_or_none()
         
-        if not parent or not parent.bookings:
-            # Если записей нет, показываем сообщение и кнопку создания
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📝 Записаться на занятие", callback_data="start_booking")],
-                [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
-            ])
+        if not parent:
             await callback_query.message.edit_text(
-                "У вас пока нет записей на занятия. Нажмите кнопку ниже, чтобы записаться:",
-                reply_markup=keyboard
+                "❌ Ошибка: не удалось найти ваши данные.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
+                ])
             )
             return
         
-        # Группируем записи по статусам
+        # Разделяем записи по статусам
         pending_bookings = []
         approved_bookings = []
-        rejected_bookings = []
         
-        for booking in sorted(parent.bookings, key=lambda b: b.date):
+        for booking in sorted(parent.bookings, key=lambda b: (b.date, b.start_time)):
             if booking.status == BookingStatus.PENDING:
                 pending_bookings.append(booking)
             elif booking.status == BookingStatus.APPROVED:
                 approved_bookings.append(booking)
-            elif booking.status == BookingStatus.REJECTED:
-                rejected_bookings.append(booking)
         
         text = ""
         keyboard = []
         
-        # Добавляем ожидающие подтверждения записи
+        # Добавляем ожидающие записи
         if pending_bookings:
-            text += "⏳ Ожидают подтверждения:\n\n"
+            text += "📋 Ожидающие подтверждения:\n\n"
             for booking in pending_bookings:
                 text += (
                     f"📚 {booking.subject_name} ({'Подготовка к экзамену' if booking.lesson_type == 'exam' else 'Стандартное занятие'})\n"
-                f"👤 Ученик: {booking.child.name} {booking.child.surname}\n"
-                f"👨‍🏫 Репетитор: {booking.tutor.name} {booking.tutor.surname}\n"
-                f"📅 Дата: {booking.date.strftime('%d.%m.%Y')}\n"
-                f"🕒 Время: {booking.start_time.strftime('%H:%M')} - {booking.end_time.strftime('%H:%M')}\n"
-                f"💰 Стоимость: {booking.price} ₽\n"
+                    f"👤 Ученик: {booking.child.name} {booking.child.surname}\n"
+                    f"👨‍🏫 Репетитор: {booking.tutor.name} {booking.tutor.surname}\n"
+                    f"📅 Дата: {booking.date.strftime('%d.%m.%Y')}\n"
+                    f"🕒 Время: {booking.start_time.strftime('%H:%M')} - {booking.end_time.strftime('%H:%M')}\n"
+                    f"💰 Стоимость: {booking.price} ₽\n"
                     "-------------------\n"
                 )
-                keyboard.append([
-                    InlineKeyboardButton(
-                        text=f"❌ Отменить запись на {booking.date.strftime('%d.%m.%Y')} {booking.start_time.strftime('%H:%M')}",
-                        callback_data=f"cancel_booking_{booking.id}"
-                    )
-                ])
         
         # Добавляем подтвержденные записи
         if approved_bookings:
@@ -211,7 +199,7 @@ async def show_bookings(callback_query: types.CallbackQuery):
                     f"📅 Дата: {booking.date.strftime('%d.%m.%Y')}\n"
                     f"🕒 Время: {booking.start_time.strftime('%H:%M')} - {booking.end_time.strftime('%H:%M')}\n"
                     f"💰 Стоимость: {booking.price} ₽\n"
-                    f"✅ Подтверждено: {booking.approved_at.strftime('%d.%m.%Y %H:%M')}\n"
+                    f"✅ Подтверждено: {booking.approved_at.strftime('%d.%m.%Y %H:%M') if booking.approved_at else 'Дата не указана'}\n"
                     "-------------------\n"
                 )
                 keyboard.append([
@@ -221,33 +209,106 @@ async def show_bookings(callback_query: types.CallbackQuery):
                     )
                 ])
         
-        # Добавляем отклоненные записи
-        if rejected_bookings:
-            text += "\n❌ Отклоненные записи:\n\n"
-            for booking in rejected_bookings:
-                text += (
-                    f"📚 {booking.subject_name} ({'Подготовка к экзамену' if booking.lesson_type == 'exam' else 'Стандартное занятие'})\n"
-                    f"👤 Ученик: {booking.child.name} {booking.child.surname}\n"
-                    f"👨‍🏫 Репетитор: {booking.tutor.name} {booking.tutor.surname}\n"
-                    f"📅 Дата: {booking.date.strftime('%d.%m.%Y')}\n"
-                    f"🕒 Время: {booking.start_time.strftime('%H:%M')} - {booking.end_time.strftime('%H:%M')}\n"
-                    f"💰 Стоимость: {booking.price} ₽\n"
-                    f"❌ Причина: {booking.rejection_reason}\n"
-                    "-------------------\n"
-                )
-                keyboard.append([
-                    InlineKeyboardButton(
-                        text=f"🔄 Записаться снова",
-                        callback_data=f"book_tutor_{booking.tutor.telegram_id}"
-                    )
-                ])
-        
         if not text:
             text = "У вас нет активных записей на занятия."
         
         # Добавляем кнопки управления
         keyboard.extend([
+            [InlineKeyboardButton(text="✖ Отклоненные записи", callback_data="show_rejected_bookings")],
             [InlineKeyboardButton(text="📝 Записаться на занятие", callback_data="start_booking")],
+            [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
+        ])
+        
+        # Разбиваем длинное сообщение при необходимости
+        if len(text) > 4096:
+            parts = []
+            while text:
+                if len(text) > 4096:
+                    part = text[:4096]
+                    last_newline = part.rfind('\n')
+                    if last_newline != -1:
+                        parts.append(part[:last_newline])
+                        text = text[last_newline + 1:]
+                    else:
+                        parts.append(part)
+                        text = text[4096:]
+                else:
+                    parts.append(text)
+                    break
+            
+            # Отправляем части сообщения
+            for i, part in enumerate(parts):
+                if i == len(parts) - 1:  # Последняя часть
+                    await callback_query.message.edit_text(
+                        part,
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+                    )
+                else:
+                    await callback_query.message.answer(part)
+        else:
+            await callback_query.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+            )
+
+async def show_rejected_bookings(callback_query: types.CallbackQuery):
+    """Показывает отклоненные записи пользователя"""
+    async with async_session_maker() as session:
+        # Получаем данные о родителе
+        parent = await session.execute(
+            select(Parent)
+            .options(
+                selectinload(Parent.bookings)
+                .selectinload(Booking.tutor),
+                selectinload(Parent.bookings)
+                .selectinload(Booking.child)
+            )
+            .where(Parent.telegram_id == callback_query.from_user.id)
+        )
+        parent = parent.scalar_one_or_none()
+        
+        if not parent:
+            await callback_query.message.edit_text(
+                "❌ Ошибка: не удалось найти ваши данные.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
+                ])
+            )
+            return
+        
+        # Получаем только отклоненные записи
+        rejected_bookings = sorted(
+            [b for b in parent.bookings if b.status == BookingStatus.REJECTED],
+            key=lambda b: (b.date, b.start_time)
+        )
+        
+        if not rejected_bookings:
+            await callback_query.message.edit_text(
+                "У вас нет отклоненных записей.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="📋 Вернуться к моим записям", callback_data="my_bookings")],
+                    [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
+                ])
+            )
+            return
+        
+        text = "❌ Отклоненные записи:\n\n"
+        keyboard = []
+        
+        for booking in rejected_bookings:
+            text += (
+                f"📚 {booking.subject_name} ({'Подготовка к экзамену' if booking.lesson_type == 'exam' else 'Стандартное занятие'})\n"
+                f"👤 Ученик: {booking.child.name} {booking.child.surname}\n"
+                f"👨‍🏫 Репетитор: {booking.tutor.name} {booking.tutor.surname}\n"
+                f"📅 Дата: {booking.date.strftime('%d.%m.%Y')}\n"
+                f"🕒 Время: {booking.start_time.strftime('%H:%M')} - {booking.end_time.strftime('%H:%M')}\n"
+                f"💰 Стоимость: {booking.price} ₽\n"
+                f"❌ Причина: {booking.rejection_reason}\n"
+                "-------------------\n"
+            )
+        
+        keyboard.extend([
+            [InlineKeyboardButton(text="📋 Вернуться к моим записям", callback_data="my_bookings")],
             [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
         ])
         
@@ -1399,6 +1460,7 @@ async def back_to_lesson_type(callback_query: types.CallbackQuery, state: FSMCon
 def register_booking_handlers(dp):
     """Регистрирует обработчики для процесса бронирования"""
     dp.callback_query.register(show_bookings, lambda c: c.data == "my_bookings")
+    dp.callback_query.register(show_rejected_bookings, lambda c: c.data == "show_rejected_bookings")
     dp.callback_query.register(start_booking, lambda c: c.data == "start_booking")
     dp.callback_query.register(process_child_selection, lambda c: c.data.startswith("book_child_"))
     dp.callback_query.register(process_tutor_selection, lambda c: c.data.startswith("book_tutor_"))

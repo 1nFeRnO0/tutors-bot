@@ -3,7 +3,7 @@ from aiogram import types
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.state import State, StatesGroup
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, or_
 from sqlalchemy.orm import selectinload, joinedload
 
 from common.database import async_session_maker, Booking, BookingStatus, Tutor
@@ -194,72 +194,98 @@ async def show_next_pending_booking(callback_query: types.CallbackQuery):
         )
 
 async def approve_booking(callback_query: types.CallbackQuery):
-    """Подтверждает запись на занятие"""
+    """Подтверждает запись"""
     booking_id = int(callback_query.data.split('_')[-1])
     
     async with async_session_maker() as session:
         try:
-            # Получаем данные о репетиторе
-            tutor = await session.execute(
-                select(Tutor).where(Tutor.telegram_id == callback_query.from_user.id)
-            )
-            tutor = tutor.scalar_one_or_none()
-            
-            if not tutor:
-                await callback_query.message.edit_text(
-                    "❌ Ошибка: не удалось найти ваши данные.",
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
-                    ])
-                )
-                return
-            
-            # Получаем запись
+            # Получаем данные о записи
             booking = await session.execute(
                 select(Booking)
+                .where(Booking.id == booking_id)
                 .options(
-                    selectinload(Booking.child),
-                    selectinload(Booking.parent)
-                )
-                .where(
-                    Booking.id == booking_id,
-                    Booking.status == BookingStatus.PENDING
+                    joinedload(Booking.child),
+                    joinedload(Booking.parent)
                 )
             )
             booking = booking.scalar_one_or_none()
             
             if not booking:
                 await callback_query.message.edit_text(
-                    "❌ Запись не найдена или уже была обработана.",
+                    "❌ Ошибка: запись не найдена.",
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="📋 Ожидающие записи", callback_data="tutor_pending_bookings")],
                         [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
                     ])
                 )
                 return
-            
-            # Проверяем, что запись принадлежит этому репетитору
-            if booking.tutor_id != tutor.id:
+
+            # Проверяем, не занят ли этот слот другой подтвержденной записью
+            conflicting_booking = await session.execute(
+                select(Booking)
+                .where(
+                    and_(
+                        Booking.tutor_id == booking.tutor_id,
+                        Booking.date == booking.date,
+                        Booking.status == BookingStatus.APPROVED,
+                        or_(
+                            # Начало нового занятия попадает в интервал существующего
+                            and_(
+                                Booking.start_time <= booking.start_time,
+                                Booking.end_time > booking.start_time
+                            ),
+                            # Конец нового занятия попадает в интервал существующего
+                            and_(
+                                Booking.start_time < booking.end_time,
+                                Booking.end_time >= booking.end_time
+                            ),
+                            # Новое занятие полностью включает существующее
+                            and_(
+                                Booking.start_time >= booking.start_time,
+                                Booking.end_time <= booking.end_time
+                            )
+                        ),
+                        Booking.id != booking_id  # Исключаем текущую запись
+                    )
+                )
+                .options(
+                    joinedload(Booking.child)
+                )
+            )
+            conflicting_booking = conflicting_booking.scalar_one_or_none()
+
+            if conflicting_booking:
+                # Если найдена конфликтующая запись, отправляем сообщение об ошибке
+                error_text = (
+                    "❌ Невозможно подтвердить запись: выбранное время уже занято.\n\n"
+                    f"Конфликт с записью:\n"
+                    f"👤 Ученик: {conflicting_booking.child.name} {conflicting_booking.child.surname}\n"
+                    f"📅 Дата: {conflicting_booking.date.strftime('%d.%m.%Y')}\n"
+                    f"🕒 Время: {conflicting_booking.start_time.strftime('%H:%M')} - {conflicting_booking.end_time.strftime('%H:%M')}"
+                )
+                
+                keyboard = [
+                    [InlineKeyboardButton(text="📋 Ожидающие записи", callback_data="tutor_pending_bookings")],
+                    [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
+                ]
+                
                 await callback_query.message.edit_text(
-                    "❌ У вас нет прав на подтверждение этой записи.",
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
-                    ])
+                    error_text,
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
                 )
                 return
-            
-            # Обновляем статус записи
+
+            # Если конфликтов нет, подтверждаем запись
             booking.status = BookingStatus.APPROVED
-            booking.approved_at = datetime.utcnow()
+            booking.approved_at = datetime.now()
             await session.commit()
             
-            # Уведомляем родителя о подтверждении
-            notification_text = (
-                "✅ Репетитор подтвердил запись!\n\n"
-                f"👤 Ученик: {booking.child.name} {booking.child.surname}\n"
-                f"👨‍🏫 Репетитор: {tutor.name} {tutor.surname}\n"
+            # Уведомляем родителя о подтверждении записи
+            from parent_bot.main import bot as parent_bot
+            
+            success_text = (
+                "✅ Запись подтверждена!\n\n"
                 f"📚 Предмет: {booking.subject_name}\n"
-                f"📝 Тип занятия: {'Подготовка к экзамену' if booking.lesson_type == 'exam' else 'Стандартное занятие'}\n"
+                f"👤 Ученик: {booking.child.name} {booking.child.surname}\n"
                 f"📅 Дата: {booking.date.strftime('%d.%m.%Y')}\n"
                 f"🕒 Время: {booking.start_time.strftime('%H:%M')} - {booking.end_time.strftime('%H:%M')}\n"
                 f"💰 Стоимость: {booking.price} ₽"
@@ -267,12 +293,15 @@ async def approve_booking(callback_query: types.CallbackQuery):
             
             await parent_bot.send_message(
                 chat_id=booking.parent.telegram_id,
-                text=notification_text
+                text=success_text
             )
             
-            # Отправляем сообщение об успешном подтверждении
+            # Отправляем подтверждение репетитору
             await callback_query.message.edit_text(
-                "✅ Запись успешно подтверждена.",
+                f"✅ Вы подтвердили запись!\n\n"
+                f"👤 Ученик: {booking.child.name} {booking.child.surname}\n"
+                f"📅 Дата: {booking.date.strftime('%d.%m.%Y')}\n"
+                f"🕒 Время: {booking.start_time.strftime('%H:%M')} - {booking.end_time.strftime('%H:%M')}",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="📋 Ожидающие записи", callback_data="tutor_pending_bookings")],
                     [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
