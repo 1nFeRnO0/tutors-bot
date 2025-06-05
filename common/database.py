@@ -5,13 +5,20 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import declarative_base
 import enum
 from typing import AsyncGenerator
-from datetime import datetime
+from datetime import datetime, date, time
 
 Base = declarative_base()
 
 class Gender(enum.Enum):
     MALE = 'M'
     FEMALE = 'F'
+
+class BookingStatus(enum.Enum):
+    """Статусы записи на занятие"""
+    PENDING = 'pending'     # Ожидает подтверждения репетитора
+    APPROVED = 'approved'   # Подтверждена репетитором
+    REJECTED = 'rejected'   # Отклонена репетитором
+    CANCELLED = 'cancelled' # Отменена родителем
 
 class Tutor(Base):
     __tablename__ = 'tutors'
@@ -77,8 +84,10 @@ class Booking(Base):
     start_time = Column(Time)
     end_time = Column(Time)
     price = Column(Integer)
-    status = Column(String, default='active')  # active, cancelled
+    status = Column(Enum(BookingStatus), default=BookingStatus.PENDING)
     created_at = Column(DateTime, default=datetime.utcnow)
+    approved_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(String, nullable=True)
 
     parent = relationship("Parent", back_populates="bookings")
     child = relationship("Child", back_populates="bookings")

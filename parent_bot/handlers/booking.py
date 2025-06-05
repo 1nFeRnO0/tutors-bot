@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from typing import List
 
-from common.database import Parent, Child, Tutor, Booking, FavoriteTutor, async_session_maker
+from common.database import Parent, Child, Tutor, Booking, BookingStatus, FavoriteTutor, async_session_maker
 from parent_bot.booking_kb import (
     get_children_keyboard,
     get_tutors_keyboard,
@@ -68,10 +68,11 @@ async def calculate_available_slots(
         
     available_slots = []
     
-    # Преобразуем существующие записи в список занятых интервалов
+    # Преобразуем существующие подтвержденные записи в список занятых интервалов
     busy_slots = []
     for booking in existing_bookings:
-        busy_slots.append((booking.start_time, booking.end_time))
+        if booking.status == BookingStatus.APPROVED:
+            busy_slots.append((booking.start_time, booking.end_time))
     
     # Сортируем занятые слоты по времени начала
     busy_slots.sort(key=lambda x: x[0])
@@ -163,45 +164,86 @@ async def show_bookings(callback_query: types.CallbackQuery):
             )
             return
         
-        # Формируем список активных записей
-        active_bookings = [b for b in parent.bookings if b.status == 'active']
+        # Группируем записи по статусам
+        pending_bookings = []
+        approved_bookings = []
+        rejected_bookings = []
         
-        if not active_bookings:
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📝 Записаться на занятие", callback_data="start_booking")],
-                [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
-            ])
-            await callback_query.message.edit_text(
-                "У вас нет активных записей на занятия. Нажмите кнопку ниже, чтобы записаться:",
-                reply_markup=keyboard
-            )
-            return
+        for booking in sorted(parent.bookings, key=lambda b: b.date):
+            if booking.status == BookingStatus.PENDING:
+                pending_bookings.append(booking)
+            elif booking.status == BookingStatus.APPROVED:
+                approved_bookings.append(booking)
+            elif booking.status == BookingStatus.REJECTED:
+                rejected_bookings.append(booking)
         
-        # Формируем текст со списком записей
-        text = "Ваши активные записи:\n\n"
+        text = ""
         keyboard = []
         
-        for booking in active_bookings:
-            # Формируем строку с информацией о записи
-            booking_info = (
-                f"📚 {booking.subject_name}\n"
+        # Добавляем ожидающие подтверждения записи
+        if pending_bookings:
+            text += "⏳ Ожидают подтверждения:\n\n"
+            for booking in pending_bookings:
+                text += (
+                    f"📚 {booking.subject_name} ({'Подготовка к экзамену' if booking.lesson_type == 'exam' else 'Стандартное занятие'})\n"
                 f"👤 Ученик: {booking.child.name} {booking.child.surname}\n"
                 f"👨‍🏫 Репетитор: {booking.tutor.name} {booking.tutor.surname}\n"
                 f"📅 Дата: {booking.date.strftime('%d.%m.%Y')}\n"
                 f"🕒 Время: {booking.start_time.strftime('%H:%M')} - {booking.end_time.strftime('%H:%M')}\n"
                 f"💰 Стоимость: {booking.price} ₽\n"
-                f"📋 Тип: {'Подготовка к экзамену' if booking.lesson_type == 'exam' else 'Стандартное занятие'}\n"
-                "-------------------\n"
-            )
-            text += booking_info
-            
-            # Добавляем кнопку отмены для каждой записи
-            keyboard.append([
-                InlineKeyboardButton(
-                    text=f"❌ Отменить запись на {booking.date.strftime('%d.%m.%Y')} {booking.start_time.strftime('%H:%M')}",
-                    callback_data=f"cancel_booking_{booking.id}"
+                    "-------------------\n"
                 )
-            ])
+                keyboard.append([
+                    InlineKeyboardButton(
+                        text=f"❌ Отменить запись на {booking.date.strftime('%d.%m.%Y')} {booking.start_time.strftime('%H:%M')}",
+                        callback_data=f"cancel_booking_{booking.id}"
+                    )
+                ])
+        
+        # Добавляем подтвержденные записи
+        if approved_bookings:
+            text += "\n✅ Подтвержденные записи:\n\n"
+            for booking in approved_bookings:
+                text += (
+                    f"📚 {booking.subject_name} ({'Подготовка к экзамену' if booking.lesson_type == 'exam' else 'Стандартное занятие'})\n"
+                    f"👤 Ученик: {booking.child.name} {booking.child.surname}\n"
+                    f"👨‍🏫 Репетитор: {booking.tutor.name} {booking.tutor.surname}\n"
+                    f"📅 Дата: {booking.date.strftime('%d.%m.%Y')}\n"
+                    f"🕒 Время: {booking.start_time.strftime('%H:%M')} - {booking.end_time.strftime('%H:%M')}\n"
+                    f"💰 Стоимость: {booking.price} ₽\n"
+                    f"✅ Подтверждено: {booking.approved_at.strftime('%d.%m.%Y %H:%M')}\n"
+                    "-------------------\n"
+                )
+                keyboard.append([
+                    InlineKeyboardButton(
+                        text=f"❌ Отменить запись на {booking.date.strftime('%d.%m.%Y')} {booking.start_time.strftime('%H:%M')}",
+                        callback_data=f"cancel_booking_{booking.id}"
+                    )
+                ])
+        
+        # Добавляем отклоненные записи
+        if rejected_bookings:
+            text += "\n❌ Отклоненные записи:\n\n"
+            for booking in rejected_bookings:
+                text += (
+                    f"📚 {booking.subject_name} ({'Подготовка к экзамену' if booking.lesson_type == 'exam' else 'Стандартное занятие'})\n"
+                    f"👤 Ученик: {booking.child.name} {booking.child.surname}\n"
+                    f"👨‍🏫 Репетитор: {booking.tutor.name} {booking.tutor.surname}\n"
+                    f"📅 Дата: {booking.date.strftime('%d.%m.%Y')}\n"
+                    f"🕒 Время: {booking.start_time.strftime('%H:%M')} - {booking.end_time.strftime('%H:%M')}\n"
+                    f"💰 Стоимость: {booking.price} ₽\n"
+                    f"❌ Причина: {booking.rejection_reason}\n"
+                    "-------------------\n"
+                )
+                keyboard.append([
+                    InlineKeyboardButton(
+                        text=f"🔄 Записаться снова",
+                        callback_data=f"book_tutor_{booking.tutor.telegram_id}"
+                    )
+                ])
+        
+        if not text:
+            text = "У вас нет активных записей на занятия."
         
         # Добавляем кнопки управления
         keyboard.extend([
@@ -209,10 +251,37 @@ async def show_bookings(callback_query: types.CallbackQuery):
             [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
         ])
         
-        await callback_query.message.edit_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
-        )
+        # Разбиваем длинное сообщение при необходимости
+        if len(text) > 4096:
+            parts = []
+            while text:
+                if len(text) > 4096:
+                    part = text[:4096]
+                    last_newline = part.rfind('\n')
+                    if last_newline != -1:
+                        parts.append(part[:last_newline])
+                        text = text[last_newline + 1:]
+                    else:
+                        parts.append(part)
+                        text = text[4096:]
+                else:
+                    parts.append(text)
+                    break
+            
+            # Отправляем части сообщения
+            for i, part in enumerate(parts):
+                if i == len(parts) - 1:  # Последняя часть
+                    await callback_query.message.edit_text(
+                        part,
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+                    )
+                else:
+                    await callback_query.message.answer(part)
+        else:
+            await callback_query.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+            )
 
 async def start_booking(callback_query: types.CallbackQuery, state: FSMContext):
     """Начинает процесс бронирования занятия"""
@@ -566,13 +635,13 @@ async def get_available_dates(
             # Проверяем, работает ли репетитор в этот день недели
             weekday = current_date.strftime('%A').lower()  # Получаем день недели в нижнем регистре
             if weekday in tutor_schedule:
-                # Получаем существующие записи на эту дату
+                # Получаем существующие подтвержденные записи на эту дату
                 existing_bookings = await session.execute(
                     select(Booking)
                     .where(
                         Booking.tutor_id == tutor_id,
                         Booking.date == current_date,
-                        Booking.status == 'active'
+                        Booking.status == BookingStatus.APPROVED
                     )
                 )
                 existing_bookings = existing_bookings.scalars().all()
@@ -928,12 +997,45 @@ async def process_time_selection(callback_query: types.CallbackQuery, state: FSM
         await state.set_state(BookingStates.confirmation)
 
 async def confirm_booking(callback_query: types.CallbackQuery, state: FSMContext):
-    """Подтверждает бронирование и создает запись в базе данных"""
+    """Подтверждает создание записи"""
     state_data = await state.get_data()
     
     async with async_session_maker() as session:
         try:
-            # Создаем новую запись
+            
+            # Сначала проверяем наличие репетитора и ребенка
+            tutor = await session.execute(
+                select(Tutor).where(Tutor.id == state_data['tutor_id'])
+            )
+            tutor = tutor.scalar_one_or_none()
+            
+            if not tutor:
+                print(f"Tutor not found with ID: {state_data['tutor_id']}")
+                await callback_query.message.edit_text(
+                    "❌ Ошибка: не удалось найти данные репетитора.",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
+                    ])
+                )
+                await state.clear()
+                return
+            
+            child = await session.execute(
+                select(Child).where(Child.id == state_data['child_id'])
+            )
+            child = child.scalar_one_or_none()
+            
+            if not child:
+                await callback_query.message.edit_text(
+                    "❌ Ошибка: не удалось найти данные ученика.",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
+                    ])
+                )
+                await state.clear()
+                return
+
+            # Создаем новую запись только если нашли и репетитора, и ученика
             booking = Booking(
                 parent_id=state_data['parent_id'],
                 child_id=state_data['child_id'],
@@ -944,21 +1046,71 @@ async def confirm_booking(callback_query: types.CallbackQuery, state: FSMContext
                 start_time=datetime.strptime(state_data['start_time'], '%H:%M').time(),
                 end_time=datetime.strptime(state_data['end_time'], '%H:%M').time(),
                 price=state_data['price'],
-                status='active',
+                status=BookingStatus.PENDING,
                 created_at=datetime.now()
             )
             
             session.add(booking)
             await session.commit()
             
-            # Отправляем сообщение об успешном бронировании
+            # Уведомляем репетитора о новой записи
+            from tutor_bot.main import bot as tutor_bot
+            
+            notification_text = (
+                "🔔 Новая запись на занятие!\n\n"
+                f"👤 Ученик: {child.name} {child.surname}\n"
+                f"📚 Предмет: {booking.subject_name}\n"
+                f"📝 Тип занятия: {'Подготовка к экзамену' if booking.lesson_type == 'exam' else 'Стандартное занятие'}\n"
+                f"📅 Дата: {booking.date.strftime('%d.%m.%Y')}\n"
+                f"🕒 Время: {booking.start_time.strftime('%H:%M')} - {booking.end_time.strftime('%H:%M')}\n"
+                f"💰 Стоимость: {booking.price} ₽"
+            )
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="✅ Подтвердить",
+                        callback_data=f"approve_booking_{booking.id}"
+                    ),
+                    InlineKeyboardButton(
+                        text="❌ Отклонить",
+                        callback_data=f"reject_booking_{booking.id}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="📋 Все ожидающие записи",
+                        callback_data="tutor_pending_bookings"
+                    )
+                ]
+            ])
+            
+            await tutor_bot.send_message(
+                chat_id=tutor.telegram_id,
+                text=notification_text,
+                reply_markup=keyboard
+            )
+            
+            # Отправляем подтверждение родителю
+            success_text = (
+                "✅ Запись успешно создана!\n\n"
+                "Ожидайте подтверждения от репетитора.\n"
+                "Вы получите уведомление, когда репетитор подтвердит или отклонит запись.\n\n"
+                f"📚 Предмет: {booking.subject_name}\n"
+                f"👨‍🏫 Репетитор: {tutor.name} {tutor.surname}\n"
+                f"📅 Дата: {booking.date.strftime('%d.%m.%Y')}\n"
+                f"🕒 Время: {booking.start_time.strftime('%H:%M')} - {booking.end_time.strftime('%H:%M')}\n"
+                f"💰 Стоимость: {booking.price} ₽"
+            )
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📋 Мои записи", callback_data="my_bookings")],
+                [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
+            ])
+            
             await callback_query.message.edit_text(
-                "✅ Занятие успешно забронировано!\n\n"
-                "Вы можете просмотреть все ваши записи в разделе 'Мои записи'.",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="📋 Мои записи", callback_data="my_bookings")],
-                    [InlineKeyboardButton(text="◀️ Вернуться в меню", callback_data="back_to_main")]
-                ])
+                success_text,
+                reply_markup=keyboard
             )
             
         except Exception as e:
@@ -1011,7 +1163,7 @@ async def cancel_existing_booking(callback_query: types.CallbackQuery):
             )
             .where(
                 Booking.id == booking_id,
-                Booking.status == 'active'
+                Booking.status.in_([BookingStatus.PENDING, BookingStatus.APPROVED])
             )
         )
         booking = booking.scalar_one_or_none()
@@ -1039,13 +1191,14 @@ async def cancel_existing_booking(callback_query: types.CallbackQuery):
         # Формируем сообщение с подтверждением отмены
         message_text = (
             "❗️ Вы действительно хотите отменить запись?\n\n"
-            f"👤 Ученик: {booking.child.name}\n"
+            f"👤 Ученик: {booking.child.name} {booking.child.surname}\n"
             f"👨‍🏫 Репетитор: {booking.tutor.name} {booking.tutor.surname}\n"
             f"📚 Предмет: {booking.subject_name}\n"
             f"📝 Тип занятия: {'Подготовка к экзамену' if booking.lesson_type == 'exam' else 'Стандартное занятие'}\n"
             f"📅 Дата: {booking.date.strftime('%d.%m.%Y')}\n"
             f"🕒 Время: {booking.start_time.strftime('%H:%M')} - {booking.end_time.strftime('%H:%M')}\n"
-            f"💰 Стоимость: {booking.price} ₽"
+            f"💰 Стоимость: {booking.price} ₽\n\n"
+            "⚠️ После отмены запись нельзя будет восстановить."
         )
         
         # Создаем клавиатуру для подтверждения отмены
@@ -1089,9 +1242,10 @@ async def confirm_cancel_booking(callback_query: types.CallbackQuery):
             # Получаем и обновляем запись
             booking = await session.execute(
                 select(Booking)
+                .options(selectinload(Booking.tutor))
                 .where(
                     Booking.id == booking_id,
-                    Booking.status == 'active'
+                    Booking.status.in_([BookingStatus.PENDING, BookingStatus.APPROVED])
                 )
             )
             booking = booking.scalar_one_or_none()
@@ -1117,8 +1271,23 @@ async def confirm_cancel_booking(callback_query: types.CallbackQuery):
                 return
             
             # Обновляем статус записи
-            booking.status = 'cancelled'
+            booking.status = BookingStatus.CANCELLED
             await session.commit()
+            
+            # Уведомляем репетитора об отмене
+            from tutor_bot.main import bot as tutor_bot
+            notification_text = (
+                "❌ Запись отменена родителем\n\n"
+                f"👤 Ученик: {booking.child.name} {booking.child.surname}\n"
+                f"📚 Предмет: {booking.subject_name} ({'Подготовка к экзамену' if booking.lesson_type == 'exam' else 'Стандартное занятие'})\n"
+                f"📅 Дата: {booking.date.strftime('%d.%m.%Y')}\n"
+                f"🕒 Время: {booking.start_time.strftime('%H:%M')} - {booking.end_time.strftime('%H:%M')}"
+            )
+            
+            await tutor_bot.send_message(
+                chat_id=booking.tutor.telegram_id,
+                text=notification_text
+            )
             
             # Отправляем сообщение об успешной отмене
             await callback_query.message.edit_text(
