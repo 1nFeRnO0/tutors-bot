@@ -4,6 +4,7 @@ test*
 local_backup*
 .env
 *.log
-
+migrations/*
+*юштш
 __pycache__
 __init__.py

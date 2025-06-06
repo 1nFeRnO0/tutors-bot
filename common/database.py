@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, JSON, ForeignKey, Enum, BigInteger, Date, Time, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, JSON, ForeignKey, Enum, BigInteger, Date, Time, DateTime, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -88,6 +88,8 @@ class Booking(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     approved_at = Column(DateTime, nullable=True)
     rejection_reason = Column(String, nullable=True)
+    notification_24h_sent = Column(Boolean, default=False)  # Флаг отправки уведомления за 24 часа
+    notification_1h_sent = Column(Boolean, default=False)   # Флаг отправки уведомления за 1 час
 
     parent = relationship("Parent", back_populates="bookings")
     child = relationship("Child", back_populates="bookings")

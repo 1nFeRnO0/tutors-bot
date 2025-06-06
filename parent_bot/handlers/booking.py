@@ -82,17 +82,41 @@ async def calculate_available_slots(
         start_time = datetime.strptime(day_schedule['start'].strip(), '%H:%M').time()
         end_time = datetime.strptime(day_schedule['end'].strip(), '%H:%M').time()
         
-        current_time = start_time
-        while True:
-            # Создаем временной слот для проверки
-            slot_end_time = (
-                datetime.combine(date, current_time) + 
-                timedelta(minutes=lesson_duration)
-            ).time()
+        # Получаем текущее время
+        now = datetime.now()
+        current_date = now.date()
+        
+        # Преобразуем время в минуты для упрощения расчетов
+        start_minutes = start_time.hour * 60 + start_time.minute
+        end_minutes = end_time.hour * 60 + end_time.minute
+        current_minutes = now.hour * 60 + now.minute if date == current_date else 0
+        
+        # Если конец дня раньше начала (например, 00:00 - 23:59), добавляем 24 часа к концу
+        if end_minutes <= start_minutes:
+            end_minutes += 24 * 60
+            # Если текущее время меньше времени начала, значит мы уже в следующем дне
+            if current_minutes < start_minutes and date == current_date:
+                current_minutes += 24 * 60
+        
+        # Если дата сегодняшняя и текущее время больше времени окончания работы, возвращаем пустой список
+        if date == current_date and current_minutes >= end_minutes:
+            return []
+        
+        # Начинаем с максимального значения между временем начала работы и текущим временем
+        current_minutes = max(start_minutes, current_minutes)
+        
+        # Генерируем слоты с шагом в 30 минут
+        while current_minutes + lesson_duration <= end_minutes:
+            # Преобразуем минуты обратно во время
+            current_hour = (current_minutes // 60) % 24
+            current_minute = current_minutes % 60
+            current_time = datetime.strptime(f"{current_hour:02d}:{current_minute:02d}", '%H:%M').time()
             
-            # Если конец слота выходит за пределы рабочего времени, прерываем
-            if slot_end_time > end_time:
-                break
+            # Вычисляем время окончания слота
+            end_slot_minutes = current_minutes + lesson_duration
+            end_slot_hour = (end_slot_minutes // 60) % 24
+            end_slot_minute = end_slot_minutes % 60
+            slot_end_time = datetime.strptime(f"{end_slot_hour:02d}:{end_slot_minute:02d}", '%H:%M').time()
             
             # Проверяем, не пересекается ли слот с существующими записями
             is_available = True
@@ -105,15 +129,8 @@ async def calculate_available_slots(
             if is_available:
                 available_slots.append((current_time, slot_end_time))
             
-            # Переходим к следующему возможному началу занятия
-            # (используем шаг в 30 минут)
-            current_time = (
-                datetime.combine(date, current_time) + 
-                timedelta(minutes=30)
-            ).time()
-            
-            if current_time >= end_time:
-                break
+            # Увеличиваем текущее время на 30 минут
+            current_minutes += 30
                 
     except ValueError as e:
         print(f"Error processing schedule for {weekday}: {str(e)}")
@@ -882,12 +899,24 @@ async def process_calendar_navigation(callback_query: types.CallbackQuery, state
             await state.clear()
             return
         
-        # Получаем первый и последний день месяца
+        # Получаем текущую дату для сравнения
+        current_date = datetime.now().date()
+        
+        # Получаем первый и последний день выбранного месяца
         start_date = datetime(year, month, 1).date()
         if month == 12:
             end_date = datetime(year + 1, 1, 1).date() - timedelta(days=1)
         else:
             end_date = datetime(year, month + 1, 1).date() - timedelta(days=1)
+            
+        # Если месяц в прошлом или текущий месяц, начинаем с текущей даты
+        if start_date < current_date:
+            start_date = current_date
+            
+        # Если конец месяца дальше чем 30 дней от текущей даты, ограничиваем 30 днями
+        max_future_date = current_date + timedelta(days=30)
+        if end_date > max_future_date:
+            end_date = max_future_date
         
         # Получаем доступные даты для выбранного месяца
         available_dates = await get_available_dates(
