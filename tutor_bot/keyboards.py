@@ -158,7 +158,7 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="👤 Мой профиль", callback_data="my_profile")],
         [InlineKeyboardButton(text="📝 Редактировать профиль", callback_data="edit_profile")],
         [InlineKeyboardButton(text="📅 Моё расписание", callback_data="schedule")],
-        [InlineKeyboardButton(text="📊 Статистика", callback_data="statistics")],
+        [InlineKeyboardButton(text="📊 Мои ученики", callback_data="my_students")],
         [InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=keyboard)

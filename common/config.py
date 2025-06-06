@@ -1,10 +1,13 @@
 import os
-from dotenv import load_dotenv
+from dotenv import find_dotenv, dotenv_values
 
-load_dotenv()
+dotenv_path = find_dotenv()
+
+print(dotenv_path)
+config = dotenv_values(dotenv_path)
  
-TUTOR_BOT_TOKEN = os.getenv("TUTOR_BOT_TOKEN")
-PARENT_BOT_TOKEN = os.getenv("PARENT_BOT_TOKEN")
+TUTOR_BOT_TOKEN = config["TUTOR_BOT_TOKEN"]
+PARENT_BOT_TOKEN = config["PARENT_BOT_TOKEN"]
 
 if not TUTOR_BOT_TOKEN:
     raise ValueError("TUTOR_BOT_TOKEN not found in environment variables") 

@@ -58,6 +58,7 @@ async def show_profile(callback_query: types.CallbackQuery):
         
         profile_text = (
             f"👤 <b>Профиль репетитора</b>\n\n"
+            f"👤 Telegram ID: {tutor.telegram_id}\n\n"
             f"👤 Имя: {full_name}\n\n"
             f"📚 <b>Предметы и цены:</b>\n{chr(10).join(subjects_text)}\n\n"
             f"📝 <b>О себе:</b>\n{tutor.description}\n\n"

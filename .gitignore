@@ -3,7 +3,7 @@
 test*
 local_backup*
 .env
-
+*.log
 
 __pycache__
 __init__.py
