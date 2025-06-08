@@ -93,16 +93,7 @@ async def get_bookings_for_period(
     ).order_by(Booking.date, Booking.start_time)
     
     result = await session.execute(query)
-    
-    # from sqlalchemy.dialects import sqlite
-    # compiled = query.compile(
-    #     dialect=sqlite.dialect(),
-    #     compile_kwargs={"literal_binds": True}
-    # )
 
-    # print(compiled)
-
-    # print(f'DEBUG:{list(result.scalars().all())}')
     return list(result.scalars().all())
 
 def format_booking_status(status: BookingStatus) -> str:
@@ -118,7 +109,6 @@ def format_booking_status(status: BookingStatus) -> str:
 
 def format_daily_schedule(bookings: List[Booking], date_str: str) -> str:
     """Форматирует расписание на день"""
-    print('DEBUG:bookings', bookings)
     if not bookings:
         return f"📅 Расписание на {date_str}\n\n🚫 Нет занятий"
     
@@ -194,7 +184,6 @@ def format_date_with_month(d: date) -> str:
 
 def format_month_title(d: date) -> str:
     """Форматирует название месяца в именительном падеже"""
-    print('DEBUG:d', d.month, MONTHS_RU_NOMINATIVE[d.month])
     return f"{MONTHS_RU_NOMINATIVE[d.month]} {d.year}"
 
 def format_monthly_schedule(bookings: List[Booking], month_str: str) -> str:
