@@ -10,6 +10,7 @@ from tutor_bot.handlers.registration import register_registration_handlers
 from tutor_bot.handlers.profile import register_profile_handlers
 from tutor_bot.handlers.booking import register_booking_handlers
 from tutor_bot.handlers.students import register_students_handlers
+from tutor_bot.handlers.schedule import register_schedule_handlers
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -29,6 +30,7 @@ async def main():
     register_profile_handlers(dp)
     register_booking_handlers(dp)
     register_students_handlers(dp)
+    register_schedule_handlers(dp)
     
     # Запуск бота
     await dp.start_polling(bot)

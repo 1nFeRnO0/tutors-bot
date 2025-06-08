@@ -88,6 +88,7 @@ class Booking(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     approved_at = Column(DateTime, nullable=True)
     rejection_reason = Column(String, nullable=True)
+    cancelled_at = Column(DateTime, nullable=True)  # Новое поле для отметки времени отмены
     notification_24h_sent = Column(Boolean, default=False)  # Флаг отправки уведомления за 24 часа
     notification_1h_sent = Column(Boolean, default=False)   # Флаг отправки уведомления за 1 час
 
@@ -98,7 +99,7 @@ class Booking(Base):
 # Создаем асинхронный движок для работы с базой данных
 engine = create_async_engine(
     'sqlite+aiosqlite:///tutors.db',
-    echo=True,
+    echo=False,
 )
 
 # Создаем фабрику сессий
